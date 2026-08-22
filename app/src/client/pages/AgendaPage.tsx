@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { PiSettings } from "../../shared/apps";
+import { PI_APPS, type PiSettings } from "../../shared/apps";
 import { StatusPill } from "../components/ToolCards";
 import { useDesk } from "../lib/desk";
 import { extractSchedule, tjColor, type ScheduleView } from "../lib/tools";
@@ -122,10 +122,23 @@ export function AgendaPage({
                 </div>
               ) : (
                 <div className="empty-hand">
-                  nothing penciled in yet — ask PI to build you a schedule
+                  nothing penciled in yet — build a schedule in TigerJunction
+                  or ask PI to start one
                   <br />
-                  <button className="cta" onClick={() => navigate("/")}>
-                    Open chat →
+                  <a
+                    className="cta"
+                    href={PI_APPS.find((a) => a.key === "junction")!.home}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open TigerJunction ↗
+                  </a>
+                  <button
+                    className="cta"
+                    style={{ marginLeft: 18 }}
+                    onClick={() => navigate("/")}
+                  >
+                    Ask PI →
                   </button>
                 </div>
               )}

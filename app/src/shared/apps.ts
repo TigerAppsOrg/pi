@@ -11,6 +11,8 @@ export type PiApp = {
   name: string;
   /** Path appended to the engine base URL. */
   mcpPath: string;
+  /** The app's own front door, for link-outs and friendly error CTAs. */
+  home: string;
   /** Two-letter mark shown when the logo can't load. */
   glyph: string;
   /** Path to the app's official logo (served from /public). */
@@ -26,6 +28,7 @@ export type PiApp = {
 export const PI_APPS: PiApp[] = [
   {
     key: "junction",
+    home: "https://junction.tigerapps.org",
     logo: "/logos/tigerjunction.png",
     glyph: "TJ",
     name: "TigerJunction",
@@ -38,6 +41,7 @@ export const PI_APPS: PiApp[] = [
   },
   {
     key: "princetoncourses",
+    home: "https://courses.tigerapps.org",
     logo: "/logos/princetoncourses.png",
     glyph: "PC",
     name: "PrincetonCourses",
@@ -50,6 +54,7 @@ export const PI_APPS: PiApp[] = [
   },
   {
     key: "path",
+    home: "https://www.tigerpath.io",
     logo: "/logos/tigerpath.png",
     glyph: "TP",
     name: "TigerPath",
@@ -62,6 +67,7 @@ export const PI_APPS: PiApp[] = [
   },
   {
     key: "snatch",
+    home: "https://tigersnatch.com",
     logo: "/logos/tigersnatch.svg",
     glyph: "TS",
     name: "TigerSnatch",

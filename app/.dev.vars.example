@@ -10,3 +10,6 @@ ENTRA_CLIENT_ID=""
 ENTRA_CLIENT_SECRET=""
 # Any long random string; signs the session cookie.
 SESSION_SECRET=""
+# OIT API store credentials (ActiveDirectory subscription) for alias->netid.
+OIT_CONSUMER_KEY=""
+OIT_CONSUMER_SECRET=""

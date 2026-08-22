@@ -21,7 +21,8 @@
     "ENGINE_MCP_BASE": "https://junction-engine.tigerapps.org",
     // OAuth client identifiers are public by design; the secret is a Worker secret.
     "ENTRA_TENANT_ID": "2ff60116-7431-425d-b5af-077d7791bda4",
-    "ENTRA_CLIENT_ID": "ad41fa25-b30a-495e-a3bb-56ce2464f106"
+    "ENTRA_CLIENT_ID": "ad41fa25-b30a-495e-a3bb-56ce2464f106",
+    "OIT_AD_BASE": "https://api.princeton.edu/active-directory/1.0.6"
   },
 
   "observability": { "enabled": true }

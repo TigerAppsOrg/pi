@@ -588,6 +588,13 @@ textarea {
   color: var(--ink-faint);
   font-size: 11px;
 }
+.chip-link {
+  color: var(--pi-deep);
+  font-weight: 600;
+  text-decoration: none;
+  margin-left: 8px;
+  white-space: nowrap;
+}
 .tool-raw {
   margin: 4px 0 8px;
   background: #f6f5f0;

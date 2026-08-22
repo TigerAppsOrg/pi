@@ -22,9 +22,22 @@ export function ToolRender({ view }: { view: ToolView }) {
     (view.data == null && view.errorText == null);
 
   if (view.errorText || view.state === "output-error") {
+    const app = PI_APPS.find((a) => a.key === view.app);
     return (
       <ToolChip view={view} running={false} error>
-        {shortError(view.errorText)}
+        <span title={shortError(view.errorText)}>
+          {app ? `${app.name} couldn't answer that` : "that didn't work"}
+        </span>
+        {app && (
+          <a
+            className="chip-link"
+            href={app.home}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open {app.name} ↗
+          </a>
+        )}
       </ToolChip>
     );
   }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { PiSettings } from "../../shared/apps";
+import { PI_APPS, type PiSettings } from "../../shared/apps";
 import { WeekGrid } from "../components/WeekGrid";
 import { useDesk } from "../lib/desk";
 import { extractSchedule, type ScheduleView } from "../lib/tools";
@@ -9,6 +9,7 @@ type SchedMeta = { id: number; title: string; term: number; termName?: string };
 type Load =
   | { kind: "loading" }
   | { kind: "blocked"; reason: string; cta: string }
+  | { kind: "fresh" }
   | { kind: "error"; message: string }
   | { kind: "ready"; schedules: SchedMeta[] };
 
@@ -56,11 +57,7 @@ export function PlannerPage({
           ? data.schedules
           : [];
         if (schedules.length === 0) {
-          setLoad({
-            kind: "blocked",
-            reason: "No schedules in TigerJunction yet.",
-            cta: "Ask PI to start one for you",
-          });
+          setLoad({ kind: "fresh" });
           return;
         }
         schedules.sort((a, b) => b.term - a.term);
@@ -135,12 +132,26 @@ export function PlannerPage({
           </div>
         )}
 
-        {load.kind === "error" && (
+        {(load.kind === "error" || load.kind === "fresh") && (
           <div className="empty-hand">
-            TigerJunction didn't answer: {load.message}
+            {load.kind === "fresh"
+              ? "Your TigerJunction shelf is empty — build a schedule there and it shows up here."
+              : "PI couldn't open your TigerJunction schedules — you may just not have visited TigerJunction yet."}
             <br />
-            <button className="cta" onClick={() => navigate("/apps")}>
-              Check your connections →
+            <a
+              className="cta"
+              href={PI_APPS.find((a) => a.key === "junction")!.home}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open TigerJunction ↗
+            </a>
+            <button
+              className="cta"
+              style={{ marginLeft: 18 }}
+              onClick={() => navigate("/")}
+            >
+              Ask PI instead →
             </button>
           </div>
         )}

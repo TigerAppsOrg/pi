@@ -247,7 +247,9 @@ export async function handleAuth(
         `a ${ALLOWED_DOMAIN} account is required (signed in as ${email || "unknown"})`
       );
     }
-    const netid = match[1];
+    // Princeton often signs people in with an email ALIAS (jane.doe@… for
+    // netid jd1234), so resolve the real netid through OIT's directory.
+    const netid = await resolveNetid(email, match[1], env);
 
     const session: Session = {
       netid,
@@ -282,4 +284,94 @@ export async function handleAuth(
 /** DO instance-name prefix owned by a user; the Worker enforces it. */
 export function userPrefix(netid: string): string {
   return `u-${netid}-`;
+}
+
+/* ── alias → netid via OIT's ActiveDirectory API ──────────────────── */
+
+const OIT_TOKEN_URL = "https://api.princeton.edu/token";
+const DEFAULT_AD_BASE = "https://api.princeton.edu/active-directory/1.0.6";
+
+/** WSO2 access token, cached for the isolate's lifetime. */
+let oitTokenCache: { token: string; exp: number } | null = null;
+
+async function oitToken(env: Env): Promise<string> {
+  if (oitTokenCache && oitTokenCache.exp > Date.now() / 1000 + 30) {
+    return oitTokenCache.token;
+  }
+  const res = await fetch(OIT_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      authorization: `Basic ${btoa(`${env.OIT_CONSUMER_KEY}:${env.OIT_CONSUMER_SECRET}`)}`,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: "grant_type=client_credentials",
+  });
+  if (!res.ok) throw new Error(`OIT token grant failed: ${res.status}`);
+  const body = (await res.json()) as {
+    access_token: string;
+    expires_in?: number;
+  };
+  oitTokenCache = {
+    token: body.access_token,
+    exp: Date.now() / 1000 + (body.expires_in ?? 3000),
+  };
+  return body.access_token;
+}
+
+async function oitUsersLookup(
+  env: Env,
+  token: string,
+  params: Record<string, string>
+): Promise<string | null> {
+  const base = (env.OIT_AD_BASE || DEFAULT_AD_BASE).replace(/\/$/, "");
+  const res = await fetch(`${base}/users?${new URLSearchParams(params)}`, {
+    headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+  });
+  if (!res.ok) return null;
+  const text = await res.text();
+  if (!text.trim() || text.startsWith("<")) return null;
+  try {
+    const data = JSON.parse(text) as unknown;
+    const list = Array.isArray(data)
+      ? data
+      : typeof data === "object" && data != null
+        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ((data as any).users ?? (data as any).result ?? [data])
+        : [];
+    for (const entry of list) {
+      const uid = entry?.uid ?? entry?.netid;
+      if (typeof uid === "string" && uid) return uid.toLowerCase();
+    }
+  } catch {
+    /* fall through */
+  }
+  return null;
+}
+
+/**
+ * Map a sign-in email to the real netid. The email's local part may be an
+ * alias, so the directory (`mail` attribute) is authoritative; if lookup is
+ * unavailable or misses, the local part is the best remaining guess.
+ */
+async function resolveNetid(
+  email: string,
+  localpart: string,
+  env: Env
+): Promise<string> {
+  if (!env.OIT_CONSUMER_KEY || !env.OIT_CONSUMER_SECRET) {
+    console.warn("OIT credentials not set — using email local part as netid");
+    return localpart;
+  }
+  try {
+    const token = await oitToken(env);
+    const byMail = await oitUsersLookup(env, token, { mail: email });
+    if (byMail) return byMail;
+    // The local part may already be the netid — confirm against the directory.
+    const byUid = await oitUsersLookup(env, token, { uid: localpart });
+    if (byUid === localpart) return localpart;
+    console.warn(`OIT lookup could not resolve ${email}; using local part`);
+  } catch (err) {
+    console.warn("OIT lookup failed", err);
+  }
+  return localpart;
 }
