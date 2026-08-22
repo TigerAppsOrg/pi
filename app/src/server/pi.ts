@@ -167,15 +167,6 @@ export class Pi extends Think<Env, PiState> {
           });
           if (result.state === "authenticating") {
             authUrls.gcal = result.authUrl;
-          } else if (this.isDesk() && !(await this.gcalTokensHas())) {
-            // Google's MCP server answers initialize and tools/list
-            // anonymously, so the connection lands "ready" without ever
-            // triggering OAuth — the 401 only appears on a real tool call.
-            // Force one so the SDK starts the authorization leg, then
-            // surface the consent URL it produced.
-            const url = await this.forceGcalConsent();
-            if (url) authUrls.gcal = url;
-            else appErrors.gcal = "couldn't start Google sign-in — try again";
           }
           continue;
         }
@@ -189,6 +180,26 @@ export class Pi extends Think<Env, PiState> {
       } catch (err) {
         appErrors[app.key] = err instanceof Error ? err.message : String(err);
       }
+    }
+
+    // Google's MCP server answers initialize and tools/list anonymously, so
+    // a tokenless connection lands "ready" without OAuth ever starting — the
+    // 401 only appears on a real tool call. If the desk is connected but has
+    // no tokens (fresh toggle OR a connection left over from an earlier
+    // visit), force that call and surface the consent URL it produces.
+    if (
+      enabled.has("gcal") &&
+      this.isDesk() &&
+      !authUrls.gcal &&
+      !appErrors.gcal &&
+      this.env.GOOGLE_OAUTH_CLIENT_ID &&
+      this.env.GOOGLE_OAUTH_CLIENT_SECRET &&
+      this.getMcpServers().servers.gcal &&
+      !(await this.gcalTokensHas())
+    ) {
+      const url = await this.forceGcalConsent();
+      if (url) authUrls.gcal = url;
+      else appErrors.gcal = "couldn't start Google sign-in — try again";
     }
 
     this.setState({ settings, appErrors, authUrls });

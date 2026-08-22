@@ -37,6 +37,10 @@ export class GoogleOAuthProvider extends DurableObjectOAuthClientProvider {
     private readonly tokenStore: GcalTokenStore
   ) {
     super(storage, clientName, fixedRedirectUrl);
+    // The stock provider only learns its clientId from dynamic registration,
+    // which Google doesn't do — and its clientId getter THROWS when unset,
+    // killing the auth leg inside saveCodeVerifier. Pin it up front.
+    this.clientId = client.client_id;
   }
 
   override get redirectUrl(): string {
@@ -72,6 +76,9 @@ export class GoogleOAuthProvider extends DurableObjectOAuthClientProvider {
   }
 
   override async redirectToAuthorization(authUrl: URL): Promise<void> {
+    // The SDK derives scopes from the server's resource metadata, which
+    // advertises WRITE scopes too — pin the request to our read-only trio.
+    authUrl.searchParams.set("scope", GCAL_SCOPES.join(" "));
     // Without offline access Google issues no refresh token and the
     // connection would die within the hour; prompt=consent guarantees a
     // refresh token on re-grants too.
