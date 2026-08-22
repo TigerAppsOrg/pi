@@ -18,6 +18,11 @@ export function AppsPage({
 }) {
   const desk = useDesk(settings);
   const [saving, setSaving] = useState(false);
+  const [callbackError] = useState(() => {
+    const err = new URLSearchParams(location.search).get("error");
+    if (err) history.replaceState(null, "", "/apps");
+    return err;
+  });
 
   // Reconcile connections on arrival so statuses and any pending Google
   // consent link are current, not left over from the last visit.
@@ -76,6 +81,14 @@ export function AppsPage({
           <span className="hand">read and act on</span> — flip them anytime.
         </p>
 
+        {callbackError && (
+          <div className="conflict-note" style={{ marginBottom: 18 }}>
+            <span className="lead">that didn't finish — </span>
+            connecting Google Calendar failed: {callbackError}. Toggle it off
+            and on to get a fresh link, then try again.
+          </div>
+        )}
+
         <div className="paper-card">
           <h3>Signed in</h3>
           <div className="field-row">
@@ -121,10 +134,10 @@ export function AppsPage({
                   <span className={status.cls}>{status.text}</span>
                   {on && desk.deskState?.authUrls?.[app.key] && (
                     <a
-                      className="cta"
+                      className="connect-btn"
                       href={desk.deskState.authUrls[app.key]}
                     >
-                      Connect with Google →
+                      Connect with Google
                     </a>
                   )}
                   <button

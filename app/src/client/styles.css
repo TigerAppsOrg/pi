@@ -1036,8 +1036,25 @@ textarea {
 .app-card .foot {
   display: flex;
   align-items: center;
+  gap: 10px;
   justify-content: space-between;
   padding-top: 4px;
+}
+.app-card .connect-btn {
+  margin-left: auto;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.app-card .connect-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-card);
 }
 .app-card .status {
   font-size: 12px;
