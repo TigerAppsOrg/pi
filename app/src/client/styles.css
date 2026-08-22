@@ -544,6 +544,16 @@ textarea {
   object-fit: contain;
   flex-shrink: 0;
 }
+.tool-card .card-head .card-link {
+  color: var(--pi-deep);
+  font-weight: 600;
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.tool-card .card-head .card-link:hover {
+  text-decoration: underline;
+}
 .tool-card .card-head .tname {
   font-family: var(--mono);
   font-size: 12px;
