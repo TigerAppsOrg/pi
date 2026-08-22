@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   PI_APPS,
   type AppKey,
@@ -18,6 +18,13 @@ export function AppsPage({
 }) {
   const desk = useDesk(settings);
   const [saving, setSaving] = useState(false);
+
+  // Reconcile connections on arrival so statuses and any pending Google
+  // consent link are current, not left over from the last visit.
+  useEffect(() => {
+    void desk.ensureSetup().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desk.settingsHash]);
 
   async function apply(next: PiSettings) {
     savePrefs(identity.netid, { apps: next.apps, model: next.model });

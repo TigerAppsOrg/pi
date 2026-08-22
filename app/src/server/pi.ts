@@ -167,6 +167,15 @@ export class Pi extends Think<Env, PiState> {
           });
           if (result.state === "authenticating") {
             authUrls.gcal = result.authUrl;
+          } else if (this.isDesk() && !(await this.gcalTokensHas())) {
+            // Google's MCP server answers initialize and tools/list
+            // anonymously, so the connection lands "ready" without ever
+            // triggering OAuth — the 401 only appears on a real tool call.
+            // Force one so the SDK starts the authorization leg, then
+            // surface the consent URL it produced.
+            const url = await this.forceGcalConsent();
+            if (url) authUrls.gcal = url;
+            else appErrors.gcal = "couldn't start Google sign-in — try again";
           }
           continue;
         }
@@ -224,6 +233,44 @@ export class Pi extends Think<Env, PiState> {
     }
     await this.addMessages(messages);
     return { ok: true as const, count: messages.length };
+  }
+
+  /**
+   * Kick Google's MCP server with a cheap authenticated-only call so the
+   * transport's OAuth machinery runs (discovery, state, PKCE) and hands us
+   * a consent URL. Returns null if calendar access unexpectedly works
+   * already or no URL could be produced.
+   */
+  private async forceGcalConsent(): Promise<string | null> {
+    try {
+      await this.mcp.callTool({
+        serverId: "gcal",
+        name: "list_calendars",
+        arguments: {},
+      });
+      return null; // already authorized somehow — nothing to do
+    } catch {
+      // Expected: 401 → the transport started the authorization flow.
+    }
+    // The live connection's provider holds the freshly built consent URL.
+    const manager = this.mcp as unknown as {
+      mcpConnections?: Record<
+        string,
+        { options?: { transport?: { authProvider?: { authUrl?: string } } } }
+      >;
+    };
+    const live =
+      manager.mcpConnections?.gcal?.options?.transport?.authProvider?.authUrl;
+    if (live) return live;
+    // Fallback: re-registering an existing server redeems a stored auth URL.
+    const retry = await this.addMcpServer("Google Calendar", GCAL_MCP_URL, {
+      id: "gcal",
+      callbackHost: this.appOrigin(),
+      callbackPath: GCAL_CALLBACK_PATH.slice(1),
+      transport: { type: "streamable-http" },
+    });
+    if (retry.state === "authenticating") return retry.authUrl;
+    return this.getMcpServers().servers.gcal?.auth_url ?? null;
   }
 
   /** The per-user desk instance is the token authority for Google OAuth. */
