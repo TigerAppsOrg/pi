@@ -52,8 +52,16 @@ export function ToolRender({ view }: { view: ToolView }) {
 
   const schedule = extractSchedule(view.data);
   if (schedule) {
+    const junction = PI_APPS.find((a) => a.key === "junction")!;
     return (
-      <ToolCard view={view} label={cardLabel(view, schedule.termName)}>
+      <ToolCard
+        view={view}
+        label={cardLabel(view, schedule.termName)}
+        link={{
+          href: `${junction.home}/recalplus`,
+          label: "Open in TigerJunction ↗",
+        }}
+      >
         {schedule.title && (
           <p style={{ margin: "0 0 10px", fontWeight: 600, fontSize: 14 }}>
             {schedule.title}
@@ -153,10 +161,12 @@ function shortError(text: string | null): string {
 function ToolCard({
   view,
   label,
+  link,
   children,
 }: {
   view: ToolView;
   label: string;
+  link?: { href: string; label: string };
   children: React.ReactNode;
 }) {
   return (
@@ -165,6 +175,16 @@ function ToolCard({
         <AppDot view={view} />
         <span>{label}</span>
         <span className="spacer" />
+        {link && (
+          <a
+            className="card-link"
+            href={link.href}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {link.label}
+          </a>
+        )}
         <span className="tname">{view.base}</span>
       </div>
       <div className="card-body">{children}</div>
