@@ -267,21 +267,52 @@ export class Pi extends Think<Env, PiState> {
     const manager = this.mcp as unknown as {
       mcpConnections?: Record<
         string,
-        { options?: { transport?: { authProvider?: { authUrl?: string } } } }
+        {
+          connectionState?: string;
+          options?: { transport?: { authProvider?: { authUrl?: string } } };
+        }
       >;
+      getServersFromStorage?: () => Array<{
+        id: string;
+        name: string;
+        server_url: string;
+        client_id: string | null;
+        auth_url: string | null;
+        callback_url: string;
+        server_options: string | null;
+      }>;
+      saveServerToStorage?: (server: {
+        id: string;
+        name: string;
+        server_url: string;
+        client_id: string | null;
+        auth_url: string | null;
+        callback_url: string;
+        server_options: string | null;
+      }) => void;
     };
-    const live =
-      manager.mcpConnections?.gcal?.options?.transport?.authProvider?.authUrl;
-    if (live) return live;
-    // Fallback: re-registering an existing server redeems a stored auth URL.
-    const retry = await this.addMcpServer("Google Calendar", GCAL_MCP_URL, {
-      id: "gcal",
-      callbackHost: this.appOrigin(),
-      callbackPath: GCAL_CALLBACK_PATH.slice(1),
-      transport: { type: "streamable-http" },
-    });
-    if (retry.state === "authenticating") return retry.authUrl;
-    return this.getMcpServers().servers.gcal?.auth_url ?? null;
+    const url =
+      manager.mcpConnections?.gcal?.options?.transport?.authProvider?.authUrl ??
+      this.getMcpServers().servers.gcal?.auth_url ??
+      null;
+    if (!url) {
+      console.warn("gcal: probe ran but no consent URL was produced");
+      return null;
+    }
+    // The anonymous connect left the connection "ready", and the SDK's
+    // callback handler short-circuits ready connections as "auth accepted"
+    // WITHOUT exchanging the authorization code — so consent silently did
+    // nothing. Flip the connection into the authenticating state (live and
+    // persisted, so a fresh isolate at callback time restores the same way)
+    // to route the callback through the real code exchange.
+    const conn = manager.mcpConnections?.gcal;
+    if (conn) conn.connectionState = "authenticating";
+    const row = manager
+      .getServersFromStorage?.()
+      .find((server) => server.id === "gcal");
+    if (row) manager.saveServerToStorage?.({ ...row, auth_url: url });
+    console.log("gcal: consent pending, connection marked authenticating");
+    return url;
   }
 
   /** The per-user desk instance is the token authority for Google OAuth. */
