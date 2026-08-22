@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   PI_APPS,
-  PI_MODELS,
   type AppKey,
   type PiSettings,
 } from "../../shared/apps";
@@ -85,31 +84,7 @@ export function AppsPage({
             </button>
           </div>
           <p className="footnote">
-            Verified by Princeton sign-in — schedules, degree progress, and
-            seat alerts are looked up under this netid.
-          </p>
-        </div>
-
-        <div className="paper-card">
-          <h3>Model</h3>
-          <div className="seg" role="radiogroup" aria-label="Model">
-            {PI_MODELS.map((m) => (
-              <button
-                key={m.value}
-                role="radio"
-                aria-checked={settings.model === m.value}
-                className={settings.model === m.value ? "active" : ""}
-                onClick={() => void apply({ ...settings, model: m.value })}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-          <p className="footnote">
-            Opus 5 is the default; Sonnet 5 is faster and cheaper. Both are
-            Claude models and need the server's key — without one, PI falls
-            back to Campus (Workers AI). You can also switch models right in
-            the chat composer.
+            PI is now connected with the TigerApps you've used in the past
           </p>
         </div>
 
