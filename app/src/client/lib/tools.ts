@@ -485,4 +485,5 @@ export const APP_INK: Record<AppKey, string> = {
   princetoncourses: "var(--hl-orange)",
   path: "var(--hl-violet)",
   snatch: "var(--hl-pink)",
+  gcal: "var(--hl-mint)",
 };

@@ -1,5 +1,6 @@
-import { routeAgentRequest } from "agents";
+import { getAgentByName, routeAgentRequest } from "agents";
 import { getSession, handleAuth, userPrefix } from "./auth";
+import { GCAL_CALLBACK_PATH } from "./gcal";
 
 export { Pi } from "./pi";
 
@@ -9,6 +10,18 @@ export default {
 
     const auth = await handleAuth(request, env);
     if (auth) return auth;
+
+    // Google's OAuth redirect lands on one fixed URI; forward it to the
+    // signed-in user's desk DO, which initiated the flow and holds the state.
+    if (url.pathname === GCAL_CALLBACK_PATH) {
+      const session = await getSession(request, env);
+      if (!session) return Response.redirect(`${url.origin}/`, 302);
+      const desk = await getAgentByName(
+        env.Pi,
+        `${userPrefix(session.netid)}desk`
+      );
+      return desk.fetch(request);
+    }
 
     // Every agent route belongs to exactly one signed-in user: instance
     // names are `u-<netid>-…`, and only that netid's session may reach them.

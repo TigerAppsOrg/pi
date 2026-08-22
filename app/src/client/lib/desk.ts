@@ -6,6 +6,7 @@ import { userInstance } from "./auth";
 export type DeskState = {
   settings: PiSettings | null;
   appErrors: Partial<Record<AppKey, string>>;
+  authUrls?: Partial<Record<AppKey, string>>;
 };
 
 export type McpServersSnapshot = {

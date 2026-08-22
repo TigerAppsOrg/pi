@@ -41,6 +41,9 @@ export function AppsPage({
   }
 
   function statusFor(key: AppKey): { text: string; cls: string } {
+    if (desk.deskState?.authUrls?.[key]) {
+      return { text: "one step left", cls: "status" };
+    }
     const err = desk.deskState?.appErrors?.[key];
     if (err) return { text: `couldn't connect — ${err}`, cls: "status err" };
     const server = desk.mcp?.servers?.[key];
@@ -109,6 +112,14 @@ export function AppsPage({
                 <p className="adetail">{app.detail}</p>
                 <div className="foot">
                   <span className={status.cls}>{status.text}</span>
+                  {on && desk.deskState?.authUrls?.[app.key] && (
+                    <a
+                      className="cta"
+                      href={desk.deskState.authUrls[app.key]}
+                    >
+                      Connect with Google →
+                    </a>
+                  )}
                   <button
                     className={on ? "toggle on" : "toggle"}
                     role="switch"

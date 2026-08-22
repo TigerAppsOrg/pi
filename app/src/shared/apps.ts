@@ -4,13 +4,15 @@
  * (connection management) and the client (the "My apps" page).
  */
 
-export type AppKey = "junction" | "princetoncourses" | "path" | "snatch";
+export type AppKey = "junction" | "princetoncourses" | "path" | "snatch" | "gcal";
 
 export type PiApp = {
   key: AppKey;
   name: string;
   /** Path appended to the engine base URL. */
   mcpPath: string;
+  /** Absolute MCP URL for servers that don't live on the engine. */
+  mcpUrl?: string;
   /** The app's own front door, for link-outs and friendly error CTAs. */
   home: string;
   /** Two-letter mark shown when the logo can't load. */
@@ -76,6 +78,20 @@ export const PI_APPS: PiApp[] = [
     detail:
       "Subscribe to full sections, get notified when seats open, and see trending courses.",
     ink: "pink",
+    personal: true,
+  },
+  {
+    key: "gcal",
+    home: "https://calendar.google.com",
+    logo: "/logos/googlecalendar.svg",
+    glyph: "GC",
+    name: "Google Calendar",
+    mcpPath: "",
+    mcpUrl: "https://calendarmcp.googleapis.com/mcp/v1",
+    tagline: "Your real calendar, read-only",
+    detail:
+      "See your events and free/busy while planning courses. PI can look at your calendar — it can never change it.",
+    ink: "cyan",
     personal: true,
   },
 ];

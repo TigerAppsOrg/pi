@@ -1,7 +1,14 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { Think } from "@cloudflare/think";
-import { callable } from "agents";
+import { callable, getAgentByName } from "agents";
+import type { AgentMcpOAuthProvider } from "agents/mcp/do-oauth-client-provider";
 import type { UIMessage } from "ai";
+import {
+  GCAL_CALLBACK_PATH,
+  GCAL_MCP_URL,
+  GoogleOAuthProvider,
+  type GcalTokenStore,
+} from "./gcal";
 import {
   DEFAULT_ENGINE_BASE,
   PI_APPS,
@@ -13,6 +20,8 @@ export type PiState = {
   settings: PiSettings | null;
   /** Per-app connection errors from the last reconcile, for the UI. */
   appErrors: Partial<Record<AppKey, string>>;
+  /** OAuth consent URLs awaiting the user (e.g. Google Calendar). */
+  authUrls?: Partial<Record<AppKey, string>>;
 };
 
 const CLAUDE_MODELS = new Set(["claude-opus-5", "claude-sonnet-5"]);
@@ -26,7 +35,7 @@ const CAMPUS_MODEL = "@cf/zai-org/glm-4.7-flash";
  * MCP endpoints, spoken over MCP v2 stateless streamable HTTP.
  */
 export class Pi extends Think<Env, PiState> {
-  initialState: PiState = { settings: null, appErrors: {} };
+  initialState: PiState = { settings: null, appErrors: {}, authUrls: {} };
 
   /** Pure chat agent — no shell tool. Workspace file tools stay available. */
   workspaceBash = false;
@@ -80,6 +89,9 @@ export class Pi extends Think<Env, PiState> {
       "- When a tool errors or returns nothing, say so plainly and suggest the closest thing you can do instead.",
       "- Before destructive changes (deleting a schedule, removing courses), confirm with the student first.",
       "- Keep answers tight. Prefer a short paragraph or a few bullets over headers and long lists.",
+      settings?.apps.includes("gcal")
+        ? "- Google Calendar is connected read-only: use its tools for the student's real events and free/busy when planning around their week. You cannot modify their calendar."
+        : "",
     ].join("\n");
   }
 
@@ -101,19 +113,28 @@ export class Pi extends Think<Env, PiState> {
     this.configure<PiSettings>(settings);
 
     const appErrors: Partial<Record<AppKey, string>> = {};
+    const authUrls: Partial<Record<AppKey, string>> = {};
     const enabled = new Set<AppKey>(settings.apps);
     // The princetoncourses MCP scope is a strict subset of junction's, so
     // connecting both would register every shared tool twice. Junction wins.
     if (enabled.has("junction")) enabled.delete("princetoncourses");
     const base = this.engineBase();
+    const expectedUrl = (app: (typeof PI_APPS)[number]) =>
+      app.mcpUrl ?? `${base}${app.mcpPath}`;
+
+    // Land the user back on My apps after a Google consent round-trip.
+    this.mcp.configureOAuthCallback({
+      successRedirect: "/apps",
+      errorRedirect: "/apps",
+    });
 
     for (const [id, server] of Object.entries(this.getMcpServers().servers)) {
       const app = PI_APPS.find((a) => a.key === id);
       const stale =
         !app ||
         !enabled.has(app.key) ||
-        identityChanged ||
-        server.server_url !== `${base}${app.mcpPath}`;
+        (identityChanged && app.key !== "gcal") ||
+        server.server_url !== expectedUrl(app);
       if (stale) await this.removeMcpServer(id);
     }
 
@@ -121,7 +142,35 @@ export class Pi extends Think<Env, PiState> {
     for (const app of PI_APPS) {
       if (!enabled.has(app.key) || connectedIds.has(app.key)) continue;
       try {
-        await this.addMcpServer(app.name, `${base}${app.mcpPath}`, {
+        if (app.key === "gcal") {
+          if (
+            !this.env.GOOGLE_OAUTH_CLIENT_ID ||
+            !this.env.GOOGLE_OAUTH_CLIENT_SECRET
+          ) {
+            appErrors.gcal = "Google sign-in isn't configured on the server yet";
+            continue;
+          }
+          // Consent happens once, on the desk (via My apps). Chats reuse the
+          // desk's tokens; without them, don't start a doomed OAuth dance.
+          if (!this.isDesk()) {
+            const desk = await this.deskStub(settings.netid);
+            if (!(await desk.gcalTokensHas())) {
+              appErrors.gcal = "Connect Google Calendar from My apps first";
+              continue;
+            }
+          }
+          const result = await this.addMcpServer(app.name, GCAL_MCP_URL, {
+            id: app.key,
+            callbackHost: this.appOrigin(),
+            callbackPath: GCAL_CALLBACK_PATH.slice(1),
+            transport: { type: "streamable-http" },
+          });
+          if (result.state === "authenticating") {
+            authUrls.gcal = result.authUrl;
+          }
+          continue;
+        }
+        await this.addMcpServer(app.name, expectedUrl(app), {
           id: app.key,
           transport: {
             type: "streamable-http",
@@ -133,8 +182,8 @@ export class Pi extends Think<Env, PiState> {
       }
     }
 
-    this.setState({ settings, appErrors });
-    return { ok: true as const, appErrors };
+    this.setState({ settings, appErrors, authUrls });
+    return { ok: true as const, appErrors, authUrls };
   }
 
   /**
@@ -175,6 +224,67 @@ export class Pi extends Think<Env, PiState> {
     }
     await this.addMessages(messages);
     return { ok: true as const, count: messages.length };
+  }
+
+  /** The per-user desk instance is the token authority for Google OAuth. */
+  private isDesk(): boolean {
+    return this.name.endsWith("-desk");
+  }
+
+  private async deskStub(netid: string) {
+    return getAgentByName(this.env.Pi, `u-${netid}-desk`);
+  }
+
+  /** DO-RPC: read the stored Google tokens (desk instance only). */
+  async gcalTokensGet(): Promise<unknown> {
+    return (await this.ctx.storage.get("gcal_tokens")) ?? null;
+  }
+
+  /** DO-RPC: persist Google tokens (desk instance only). */
+  async gcalTokensSet(tokens: unknown): Promise<void> {
+    await this.ctx.storage.put("gcal_tokens", tokens);
+  }
+
+  /** DO-RPC: whether the user has connected Google Calendar. */
+  async gcalTokensHas(): Promise<boolean> {
+    return (await this.ctx.storage.get("gcal_tokens")) != null;
+  }
+
+  private gcalTokenStore(netid: string): GcalTokenStore {
+    if (this.isDesk()) {
+      return {
+        get: () => this.gcalTokensGet(),
+        set: (tokens) => this.gcalTokensSet(tokens),
+      };
+    }
+    return {
+      get: async () => (await this.deskStub(netid)).gcalTokensGet(),
+      set: async (tokens) => (await this.deskStub(netid)).gcalTokensSet(tokens),
+    };
+  }
+
+  /**
+   * Google pre-registers its OAuth client, so the SDK's dynamic-registration
+   * provider is replaced with one carrying our client credentials. Engine
+   * connections never 401, so this provider is inert for them.
+   */
+  override createMcpOAuthProvider(_callbackUrl: string): AgentMcpOAuthProvider {
+    // The redirect URI is fixed — Google requires an exact pre-registered match.
+    const netid = this.getConfig<PiSettings>()?.netid ?? "";
+    return new GoogleOAuthProvider(
+      this.ctx.storage,
+      this.name,
+      `${this.appOrigin()}${GCAL_CALLBACK_PATH}`,
+      {
+        client_id: this.env.GOOGLE_OAUTH_CLIENT_ID ?? "",
+        client_secret: this.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",
+      },
+      this.gcalTokenStore(netid)
+    );
+  }
+
+  private appOrigin(): string {
+    return (this.env.APP_ORIGIN || "https://pi.tigerapps.org").replace(/\/$/, "");
   }
 
   private engineBase(): string {
