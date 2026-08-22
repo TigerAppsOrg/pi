@@ -46,6 +46,9 @@ export function AppsPage({
     if (err) return { text: `couldn't connect — ${err}`, cls: "status err" };
     const server = desk.mcp?.servers?.[key];
     if (!settings.apps.includes(key)) return { text: "off", cls: "status" };
+    if (key === "princetoncourses" && settings.apps.includes("junction")) {
+      return { text: "covered by TigerJunction", cls: "status on" };
+    }
     if (server?.state === "ready" || server?.state === "connected") {
       return { text: "connected", cls: "status on" };
     }

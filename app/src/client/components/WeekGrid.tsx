@@ -1,5 +1,5 @@
 import type { Meeting, ScheduleView } from "../lib/tools";
-import { tjColor } from "../lib/tools";
+import { fmtRange, tjColor } from "../lib/tools";
 
 const DAY_COLUMNS = [
   ["Monday", "M"],
@@ -9,7 +9,8 @@ const DAY_COLUMNS = [
   ["Friday", "F"],
 ] as const;
 
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+const DAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+const DAY_LABELS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 
 const START = 8 * 60; // 8:00 AM
 
@@ -81,7 +82,12 @@ export function WeekGrid({
     <div>
       <div
         className={compact ? "week compact" : "week"}
-        style={{ "--rows": hours } as React.CSSProperties}
+        style={
+          {
+            "--rows": hours,
+            "--week-h": compact ? `${hours * 26}px` : `${hours * 60}px`,
+          } as React.CSSProperties
+        }
       >
         <div className="axis" aria-hidden>
           <div className="day-name">&nbsp;</div>
@@ -100,7 +106,7 @@ export function WeekGrid({
         </div>
         {DAY_COLUMNS.map(([full, short], di) => (
           <div key={full} className="day">
-            <div className="day-name">{DAY_LABELS[di]}</div>
+            <div className="day-name">{compact ? DAY_LABELS_SHORT[di] : DAY_LABELS[di]}</div>
             <div className="day-col">
               {layoutDay(
                 schedule.meetings.filter((m) => onDay(m, full, short))
@@ -135,17 +141,16 @@ export function WeekGrid({
                     }}
                     title={`${m.courseCode} ${m.label} · ${m.startLabel}–${m.endLabel}${m.room ? ` · ${m.room}` : ""}${m.confirmed ? "" : " · option — pick in TigerJunction"}`}
                   >
-                    {!compact && duration >= 60 && cols <= 2 && (
+                    {!compact && duration >= 45 && cols <= 2 && (
                       <div className="btime">
-                        {m.startLabel.replace(" ", "")}–
-                        {m.endLabel.replace(" ", "")}
+                        {fmtRange(m.startMin, m.endMin)}
                       </div>
                     )}
                     <div className="bcode">
                       {m.courseCode}
                       {!compact && cols <= 3 ? ` ${m.label}` : ""}
                     </div>
-                    {!compact && duration >= 80 && cols === 1 && m.room && (
+                    {!compact && duration >= 75 && cols === 1 && m.room && (
                       <div className="bwhere">{m.room}</div>
                     )}
                   </div>
