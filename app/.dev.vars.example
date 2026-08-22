@@ -13,3 +13,8 @@ SESSION_SECRET=""
 # OIT API store credentials (ActiveDirectory subscription) for alias->netid.
 OIT_CONSUMER_KEY=""
 OIT_CONSUMER_SECRET=""
+# Google Calendar MCP (dev needs its own OAuth client with a
+# http://localhost:5173/oauth/google/callback redirect URI).
+GOOGLE_OAUTH_CLIENT_ID=""
+GOOGLE_OAUTH_CLIENT_SECRET=""
+APP_ORIGIN=""

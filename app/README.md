@@ -48,6 +48,14 @@ browser (React + useAgentChat over WebSocket)
   full-page weekly Planner, an Agenda, and My apps. Design system in
   `src/client/styles.css`; official TigerApps logos in `public/logos/`.
 
+- **Google Calendar**: connects to Google's hosted Calendar MCP server with
+  read-only scopes via OAuth (`src/server/gcal.ts`). The client is
+  pre-registered in Google Cloud; consent runs once from *My apps* against
+  the user's desk DO, which stores the tokens and shares them with that
+  user's chats. Requires the `GOOGLE_OAUTH_CLIENT_ID` var, the
+  `GOOGLE_OAUTH_CLIENT_SECRET` secret, and an authorized redirect URI of
+  `<origin>/oauth/google/callback` on the OAuth client.
+
 ## Develop
 
 ```bash
