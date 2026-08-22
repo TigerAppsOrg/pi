@@ -121,6 +121,12 @@ export class Pi extends Think<Env, PiState> {
     const base = this.engineBase();
     const expectedUrl = (app: (typeof PI_APPS)[number]) =>
       app.mcpUrl ?? `${base}${app.mcpPath}`;
+    // Chats may only hold a Google connection while the desk has tokens —
+    // this also evicts legacy connections made before token gating existed.
+    const gcalEntitled =
+      !enabled.has("gcal") || this.isDesk()
+        ? true
+        : await (await this.deskStub(settings.netid)).gcalTokensHas();
 
     // Land the user back on My apps after a Google consent round-trip.
     this.mcp.configureOAuthCallback({
@@ -134,6 +140,7 @@ export class Pi extends Think<Env, PiState> {
         !app ||
         !enabled.has(app.key) ||
         (identityChanged && app.key !== "gcal") ||
+        (app.key === "gcal" && !gcalEntitled) ||
         server.server_url !== expectedUrl(app);
       if (stale) await this.removeMcpServer(id);
     }
@@ -291,10 +298,35 @@ export class Pi extends Think<Env, PiState> {
         server_options: string | null;
       }) => void;
     };
-    const url =
+    let url =
       manager.mcpConnections?.gcal?.options?.transport?.authProvider?.authUrl ??
-      this.getMcpServers().servers.gcal?.auth_url ??
       null;
+    if (!url) {
+      // The connection was likely restored in the authenticating state, so
+      // the probe couldn't run the auth leg. Reset to a fresh anonymous
+      // connection and probe again — a persisted auth_url is useless once
+      // its OAuth state expires (10 minutes).
+      console.log("gcal: resetting connection to mint a fresh consent URL");
+      await this.removeMcpServer("gcal");
+      await this.addMcpServer("Google Calendar", GCAL_MCP_URL, {
+        id: "gcal",
+        callbackHost: this.appOrigin(),
+        callbackPath: GCAL_CALLBACK_PATH.slice(1),
+        transport: { type: "streamable-http" },
+      });
+      try {
+        await this.mcp.callTool({
+          serverId: "gcal",
+          name: "list_calendars",
+          arguments: {},
+        });
+      } catch {
+        // expected 401 — the transport just ran the authorization leg
+      }
+      url =
+        manager.mcpConnections?.gcal?.options?.transport?.authProvider
+          ?.authUrl ?? null;
+    }
     if (!url) {
       console.warn("gcal: probe ran but no consent URL was produced");
       return null;
