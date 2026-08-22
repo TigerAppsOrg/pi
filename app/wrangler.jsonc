@@ -25,7 +25,7 @@
     "OIT_AD_BASE": "https://api.princeton.edu/active-directory/1.0.6",
     "APP_ORIGIN": "https://pi.tigerapps.org",
     // Public OAuth client id from the Google Cloud project; the secret is a Worker secret.
-    "GOOGLE_OAUTH_CLIENT_ID": ""
+    "GOOGLE_OAUTH_CLIENT_ID": "548956142814-upcmsgqr9pbafnlsorhimvje1negt5lm.apps.googleusercontent.com"
   },
 
   "observability": { "enabled": true }
