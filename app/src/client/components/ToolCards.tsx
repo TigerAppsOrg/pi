@@ -73,8 +73,23 @@ export function ToolRender({ view }: { view: ToolView }) {
         <div className="course-rows">
           {shown.map((c, i) => (
             <div key={i} className="course-row">
-              <span className="code">{c.code}</span>
-              <span className="ctitle">{c.title}</span>
+              {c.pcUrl ? (
+                <a
+                  className="course-link"
+                  href={c.pcUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Ratings & reviews on PrincetonCourses ↗"
+                >
+                  <span className="code">{c.code}</span>
+                  <span className="ctitle">{c.title}</span>
+                </a>
+              ) : (
+                <>
+                  <span className="code">{c.code}</span>
+                  <span className="ctitle">{c.title}</span>
+                </>
+              )}
               {c.meta && <span className="meta">{c.meta}</span>}
               {c.rating != null && (
                 <span className="rating-chip">{c.rating.toFixed(2)}</span>

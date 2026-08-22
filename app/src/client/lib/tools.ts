@@ -156,14 +156,34 @@ export function tjColor(index: number, darken = 0): string {
 
 export function parseTime(label: unknown): number | null {
   if (typeof label !== "string") return null;
-  const m = label.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  // Fractional minutes appear when the engine mis-decodes TigerJunction's
+  // 10-minute time units (see decodeCompressedTimes below).
+  const m = label.trim().match(/^(\d{1,2}):(\d{2}(?:\.\d+)?)\s*(AM|PM)$/i);
   if (!m) return null;
   let hour = parseInt(m[1], 10);
-  const minute = parseInt(m[2], 10);
+  const minute = parseFloat(m[2]);
   const ampm = m[3].toUpperCase();
   if (ampm === "PM" && hour !== 12) hour += 12;
   if (ampm === "AM" && hour === 12) hour = 0;
   return hour * 60 + minute;
+}
+
+/** Minutes-since-midnight → "1:05 PM". */
+export function fmtTime(min: number): string {
+  const h24 = Math.floor(min / 60);
+  const m = Math.round(min % 60);
+  const h12 = h24 % 12 || 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${h24 >= 12 ? "PM" : "AM"}`;
+}
+
+/** Minutes → TJ-style in-block range label, "12:15-1:05". */
+export function fmtRange(start: number, end: number): string {
+  const short = (min: number) => {
+    const h24 = Math.floor(min / 60);
+    const m = Math.round(min % 60);
+    return `${h24 % 12 || 12}:${String(m).padStart(2, "0")}`;
+  };
+  return `${short(start)}-${short(end)}`;
 }
 
 /**
@@ -217,6 +237,33 @@ export function extractSchedule(data: unknown): ScheduleView | null {
     });
   }
   if (raw.length === 0) return null;
+
+  // The deployed engine renders TigerJunction's Supabase times as if the
+  // stored value were minutes-past-8am, but junction actually stores
+  // 10-minute units (web convert.ts: hour = value/6 + 8). The tell: every
+  // "time" lands before 10 AM, often with fractional minutes. Undo it:
+  // real = (mislabeled - 480) * 10 + 480. Harmless once the engine is
+  // fixed, because genuine schedules never trip the detector.
+  const timed = raw.filter((r) => r.startMin != null);
+  const compressed =
+    timed.length > 0 &&
+    timed.every(
+      (r) => r.startMin! < 600 && (r.endMin == null || r.endMin < 600)
+    );
+  if (compressed) {
+    for (const r of timed) {
+      r.startMin = Math.round((r.startMin! - 480) * 10 + 480);
+      if (r.endMin != null) r.endMin = Math.round((r.endMin - 480) * 10 + 480);
+      r.startLabel = fmtTime(r.startMin);
+      if (r.endMin != null) r.endLabel = fmtTime(r.endMin);
+    }
+  } else {
+    // Normalize any fractional minutes either way.
+    for (const r of timed) {
+      r.startMin = Math.round(r.startMin!);
+      if (r.endMin != null) r.endMin = Math.round(r.endMin);
+    }
+  }
 
   // One palette color per course, in order of first appearance.
   const colorOf = new Map<string, number>();
@@ -342,7 +389,30 @@ export type CourseRowData = {
   status?: string;
   rating?: number | null;
   meta?: string;
+  /** Deep link to this offering on PrincetonCourses, when derivable. */
+  pcUrl?: string;
 };
+
+const PC_HOME = PI_APPS.find((a) => a.key === "princetoncourses")!.home;
+
+/**
+ * PrincetonCourses keys courses by registrar guid = term + courseID
+ * (e.g. 1264002051). The engine hands us "002051-1264" ids or
+ * listingId + term pairs.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function pcCourseUrl(c: any): string | undefined {
+  if (typeof c.id === "string") {
+    const m = c.id.match(/^(\d{6})-(\d{4})$/);
+    if (m) return `${PC_HOME}/course/${m[2]}${m[1]}`;
+  }
+  const listing = c.listingId ?? c.listing_id;
+  const term = typeof c.term === "number" ? c.term : undefined;
+  if (typeof listing === "string" && /^\d{6}$/.test(listing) && term) {
+    return `${PC_HOME}/course/${term}${listing}`;
+  }
+  return undefined;
+}
 
 export function extractCourses(data: unknown): CourseRowData[] | null {
   if (data == null || typeof data !== "object") return null;
@@ -379,6 +449,7 @@ export function extractCourses(data: unknown): CourseRowData[] | null {
       status: c.status ? String(c.status) : undefined,
       rating,
       meta: bits.join(" · ") || undefined,
+      pcUrl: pcCourseUrl(c),
     });
   }
   return rows.length > 0 ? rows : null;

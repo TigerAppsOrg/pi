@@ -1,0 +1,318 @@
+{
+  "schedule": {
+    "id": 68717,
+    "title": "My Schedule",
+    "term": 1272,
+    "termName": "Fall 2026"
+  },
+  "courses": [
+    {
+      "id": 24503,
+      "code": "COS226",
+      "title": "Algorithms and Data Structures",
+      "status": "open"
+    },
+    {
+      "id": 24508,
+      "code": "COS326",
+      "title": "Functional Programming and Formal Methods",
+      "status": "open"
+    },
+    {
+      "id": 24509,
+      "code": "COS330",
+      "title": "Great Ideas in Theoretical Computer Science",
+      "status": "open"
+    },
+    {
+      "id": 24515,
+      "code": "COS424",
+      "title": "Reasoning with Data",
+      "status": "open"
+    },
+    {
+      "id": 25354,
+      "code": "VIS218",
+      "title": "Graphic Design: Image",
+      "status": "open"
+    }
+  ],
+  "sections": [
+    {
+      "courseCode": "COS424",
+      "sectionTitle": "P04",
+      "days": [
+        "F"
+      ],
+      "startTime": "8:25.5 AM",
+      "endTime": "8:30.5 AM",
+      "room": "Friend Center 112",
+      "status": "closed"
+    },
+    {
+      "courseCode": "COS424",
+      "sectionTitle": "P03",
+      "days": [
+        "F"
+      ],
+      "startTime": "8:25.5 AM",
+      "endTime": "8:30.5 AM",
+      "room": "Friend Center 111",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS226",
+      "sectionTitle": "L01",
+      "days": [
+        "T",
+        "Th"
+      ],
+      "startTime": "8:32 AM",
+      "endTime": "8:40 AM",
+      "room": "Friend Center 101",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS226",
+      "sectionTitle": "P01",
+      "days": [
+        "Th"
+      ],
+      "startTime": "8:41.5 AM",
+      "endTime": "8:49.5 AM",
+      "room": "Andlinger Center 017",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS226",
+      "sectionTitle": "P02",
+      "days": [
+        "F"
+      ],
+      "startTime": "8:16 AM",
+      "endTime": "8:24 AM",
+      "room": "Andlinger Center 017",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS226",
+      "sectionTitle": "P04",
+      "days": [
+        "F"
+      ],
+      "startTime": "8:41.5 AM",
+      "endTime": "8:49.5 AM",
+      "room": "Friend Center 112",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS226",
+      "sectionTitle": "P01A",
+      "days": [
+        "Th"
+      ],
+      "startTime": "8:41.5 AM",
+      "endTime": "8:49.5 AM",
+      "room": "Friend Center 111",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS226",
+      "sectionTitle": "P02A",
+      "days": [
+        "F"
+      ],
+      "startTime": "8:16 AM",
+      "endTime": "8:24 AM",
+      "room": "Friend Center 006",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS226",
+      "sectionTitle": "P02B",
+      "days": [
+        "F"
+      ],
+      "startTime": "8:16 AM",
+      "endTime": "8:24 AM",
+      "room": null,
+      "status": "canceled"
+    },
+    {
+      "courseCode": "COS226",
+      "sectionTitle": "P03",
+      "days": [
+        "F"
+      ],
+      "startTime": "8:32 AM",
+      "endTime": "8:40 AM",
+      "room": "Friend Center 108",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS226",
+      "sectionTitle": "P03A",
+      "days": [
+        "F"
+      ],
+      "startTime": "8:32 AM",
+      "endTime": "8:40 AM",
+      "room": "Friend Center 111",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS226",
+      "sectionTitle": "P05",
+      "days": [
+        "F"
+      ],
+      "startTime": "8:16 AM",
+      "endTime": "8:24 AM",
+      "room": "Friend Center 009",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS330",
+      "sectionTitle": "L01",
+      "days": [
+        "M",
+        "W"
+      ],
+      "startTime": "8:16 AM",
+      "endTime": "8:24 AM",
+      "room": "McCosh Hall 46",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS326",
+      "sectionTitle": "L01",
+      "days": [
+        "T",
+        "Th"
+      ],
+      "startTime": "8:16 AM",
+      "endTime": "8:21 AM",
+      "room": "Engineering Quad D-Wing D221",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS326",
+      "sectionTitle": "P01",
+      "days": [
+        "Th"
+      ],
+      "startTime": "8:25.5 AM",
+      "endTime": "8:30.5 AM",
+      "room": "Friend Center 108",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS326",
+      "sectionTitle": "P02",
+      "days": [
+        "F"
+      ],
+      "startTime": "8:25.5 AM",
+      "endTime": "8:30.5 AM",
+      "room": "Sherrerd Hall 001",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS330",
+      "sectionTitle": "P01",
+      "days": [
+        "Th"
+      ],
+      "startTime": "8:32 AM",
+      "endTime": "8:37 AM",
+      "room": "Friend Center 108",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS330",
+      "sectionTitle": "P02",
+      "days": [
+        "F"
+      ],
+      "startTime": "8:32 AM",
+      "endTime": "8:37 AM",
+      "room": "Friend Center 109",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS330",
+      "sectionTitle": "P03",
+      "days": [
+        "F"
+      ],
+      "startTime": "8:32 AM",
+      "endTime": "8:37 AM",
+      "room": "Friend Center 009",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS424",
+      "sectionTitle": "L01",
+      "days": [
+        "T",
+        "Th"
+      ],
+      "startTime": "8:41.5 AM",
+      "endTime": "8:49.5 AM",
+      "room": "Engineering Quad E-Wing E225",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS424",
+      "sectionTitle": "P01",
+      "days": [
+        "F"
+      ],
+      "startTime": "8:16 AM",
+      "endTime": "8:21 AM",
+      "room": "Friend Center 111",
+      "status": "open"
+    },
+    {
+      "courseCode": "COS424",
+      "sectionTitle": "P02",
+      "days": [
+        "F"
+      ],
+      "startTime": "8:16 AM",
+      "endTime": "8:21 AM",
+      "room": "Friend Center 110",
+      "status": "closed"
+    },
+    {
+      "courseCode": "VIS218",
+      "sectionTitle": "U01",
+      "days": [
+        "M"
+      ],
+      "startTime": "8:33 AM",
+      "endTime": "8:50 AM",
+      "room": "Nassau Street, 185 205",
+      "status": "open"
+    }
+  ],
+  "conflicts": [
+    "COS424 (P04) overlaps with COS326 (P02)",
+    "COS424 (P03) overlaps with COS326 (P02)",
+    "COS226 (L01) overlaps with COS330 (P01)",
+    "COS226 (P01) overlaps with COS424 (L01)",
+    "COS226 (P02) overlaps with COS424 (P01)",
+    "COS226 (P02) overlaps with COS424 (P02)",
+    "COS226 (P01A) overlaps with COS424 (L01)",
+    "COS226 (P02A) overlaps with COS424 (P01)",
+    "COS226 (P02A) overlaps with COS424 (P02)",
+    "COS226 (P02B) overlaps with COS424 (P01)",
+    "COS226 (P02B) overlaps with COS424 (P02)",
+    "COS226 (P03) overlaps with COS330 (P02)",
+    "COS226 (P03) overlaps with COS330 (P03)",
+    "COS226 (P03A) overlaps with COS330 (P02)",
+    "COS226 (P03A) overlaps with COS330 (P03)",
+    "COS226 (P05) overlaps with COS424 (P01)",
+    "COS226 (P05) overlaps with COS424 (P02)"
+  ]
+}

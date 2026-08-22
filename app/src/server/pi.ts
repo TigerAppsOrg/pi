@@ -96,6 +96,9 @@ export class Pi extends Think<Env, PiState> {
 
     const appErrors: Partial<Record<AppKey, string>> = {};
     const enabled = new Set<AppKey>(settings.apps);
+    // The princetoncourses MCP scope is a strict subset of junction's, so
+    // connecting both would register every shared tool twice. Junction wins.
+    if (enabled.has("junction")) enabled.delete("princetoncourses");
     const base = this.engineBase();
 
     for (const [id, server] of Object.entries(this.getMcpServers().servers)) {
