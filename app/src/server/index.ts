@@ -15,12 +15,19 @@ export default {
     // signed-in user's desk DO, which initiated the flow and holds the state.
     if (url.pathname === GCAL_CALLBACK_PATH) {
       const session = await getSession(request, env);
-      if (!session) return Response.redirect(`${url.origin}/`, 302);
+      if (!session) {
+        console.warn("oauth callback arrived without a session — bouncing home");
+        return Response.redirect(`${url.origin}/`, 302);
+      }
       const desk = await getAgentByName(
         env.Pi,
         `${userPrefix(session.netid)}desk`
       );
-      return desk.fetch(request);
+      const response = await desk.fetch(request);
+      console.log(
+        `oauth callback for ${session.netid}: desk answered ${response.status} → ${response.headers.get("location") ?? "(no redirect)"}`
+      );
+      return response;
     }
 
     // Every agent route belongs to exactly one signed-in user: instance
