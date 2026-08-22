@@ -1,0 +1,4 @@
+# Copy to .dev.vars and fill in. `wrangler types` reads this file so these
+# optional secrets show up on Env.
+ANTHROPIC_API_KEY=""
+ENGINE_MCP_TOKEN=""
