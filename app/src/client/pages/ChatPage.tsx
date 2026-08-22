@@ -7,7 +7,8 @@ import { PI_MODELS, type PiSettings } from "../../shared/apps";
 import { Composer } from "../components/Composer";
 import { Markdown } from "../components/Markdown";
 import { ToolRender } from "../components/ToolCards";
-import { newChatId, saveSettings, upsertChat, useChats } from "../lib/store";
+import { userInstance, type Identity } from "../lib/auth";
+import { newChatId, savePrefs, upsertChat, useChats } from "../lib/store";
 import { parseToolPart } from "../lib/tools";
 
 const SUGGESTIONS = [
@@ -27,20 +28,22 @@ function messageText(m: UIMessage): string {
 export function ChatPage({
   chatId,
   isDraft,
+  identity,
   settings,
   navigate,
 }: {
   chatId: string;
   /** True when this chat hasn't been sent to yet (the "/" home state). */
   isDraft: boolean;
+  identity: Identity;
   settings: PiSettings;
   navigate: (path: string, replace?: boolean) => void;
 }) {
-  const agent = useAgent({ agent: "pi", name: chatId });
+  const agent = useAgent({ agent: "pi", name: userInstance(identity.netid, chatId) });
   const chat = useAgentChat({ agent });
   const { messages, sendMessage, status, stop, regenerate, connectionError } =
     chat;
-  const chats = useChats();
+  const chats = useChats(identity.netid);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const settingsHash = useMemo(() => JSON.stringify(settings), [settings]);
@@ -85,7 +88,7 @@ export function ChatPage({
   async function send(text: string) {
     startedRef.current = true;
     if (isDraft) navigate(`/chat/${chatId}`, true);
-    upsertChat({
+    upsertChat(identity.netid, {
       id: chatId,
       title: firstTitle(messages) ?? text.slice(0, 48),
       at: Date.now(),
@@ -102,7 +105,7 @@ export function ChatPage({
     try {
       const client = new AgentClient({
         agent: "pi",
-        name: id,
+        name: userInstance(identity.netid, id),
         host: location.host,
       });
       await client.ready;
@@ -110,7 +113,7 @@ export function ChatPage({
       await client.call("setup", [settings]);
       client.close();
       const current = chats.find((c) => c.id === chatId);
-      upsertChat({
+      upsertChat(identity.netid, {
         id,
         title: `⑂ ${current?.title ?? firstTitle(messages) ?? "fork"}`.slice(
           0,
@@ -135,7 +138,7 @@ export function ChatPage({
 
   const busy = status === "submitted" || status === "streaming";
   const empty = messages.length === 0;
-  const name = settings.netid || "tiger";
+  const name = (identity.name.split(" ")[0] || identity.netid).toLowerCase();
   const lastAssistantId = [...messages]
     .reverse()
     .find((m) => m.role === "assistant")?.id;
@@ -146,8 +149,8 @@ export function ChatPage({
       aria-label="Model"
       value={settings.model}
       onChange={(e) =>
-        saveSettings({
-          ...settings,
+        savePrefs(identity.netid, {
+          apps: settings.apps,
           model: e.target.value as PiSettings["model"],
         })
       }

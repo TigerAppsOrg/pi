@@ -45,7 +45,7 @@ export function AgendaPage({
     }
 
     (async () => {
-      if (settings.netid) {
+      {
         try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const list = (await desk.callApp("junction", "get_user_schedules", {})) as any;
@@ -72,8 +72,6 @@ export function AgendaPage({
         } catch {
           if (!cancelled) setWatches([]);
         }
-      } else {
-        setWatches([]);
       }
       try {
         const hot = await desk.callApp("junction", "get_trending_courses", {});
@@ -124,15 +122,10 @@ export function AgendaPage({
                 </div>
               ) : (
                 <div className="empty-hand">
-                  {settings.netid
-                    ? "nothing penciled in yet — ask PI to build you a schedule"
-                    : "set your netid to see your courses here"}
+                  nothing penciled in yet — ask PI to build you a schedule
                   <br />
-                  <button
-                    className="cta"
-                    onClick={() => navigate(settings.netid ? "/" : "/apps")}
-                  >
-                    {settings.netid ? "Open chat →" : "My apps →"}
+                  <button className="cta" onClick={() => navigate("/")}>
+                    Open chat →
                   </button>
                 </div>
               )}

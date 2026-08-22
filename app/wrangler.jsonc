@@ -14,11 +14,14 @@
 
   "assets": {
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/agents/*"]
+    "run_worker_first": ["/agents/*", "/auth/*"]
   },
 
   "vars": {
-    "ENGINE_MCP_BASE": "https://junction-engine.tigerapps.org"
+    "ENGINE_MCP_BASE": "https://junction-engine.tigerapps.org",
+    // OAuth client identifiers are public by design; the secret is a Worker secret.
+    "ENTRA_TENANT_ID": "2ff60116-7431-425d-b5af-077d7791bda4",
+    "ENTRA_CLIENT_ID": "ad41fa25-b30a-495e-a3bb-56ce2464f106"
   },
 
   "observability": { "enabled": true }

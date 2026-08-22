@@ -1,10 +1,12 @@
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Sidebar, type Route } from "./components/Sidebar";
-import { newChatId, useChats, useSettings } from "./lib/store";
+import { useIdentity, type Identity } from "./lib/auth";
+import { newChatId, toSettings, useChats, usePrefs } from "./lib/store";
 import { AgendaPage } from "./pages/AgendaPage";
 import { AppsPage } from "./pages/AppsPage";
 import { ChatPage } from "./pages/ChatPage";
 import { PlannerPage } from "./pages/PlannerPage";
+import { SignInPage } from "./pages/SignInPage";
 
 function parseRoute(pathname: string): Route {
   const chat = pathname.match(/^\/chat\/([\w-]+)$/);
@@ -16,13 +18,31 @@ function parseRoute(pathname: string): Route {
 }
 
 export function App() {
+  const auth = useIdentity();
+
+  if (auth.status === "loading") {
+    return (
+      <div className="empty-hand" style={{ paddingTop: "30vh" }}>
+        opening your desk…
+      </div>
+    );
+  }
+  if (auth.status === "anon") return <SignInPage />;
+  return <Desk identity={auth.identity} />;
+}
+
+function Desk({ identity }: { identity: Identity }) {
   const [route, setRoute] = useState<Route>(() =>
     parseRoute(location.pathname)
   );
   const [draftId, setDraftId] = useState(() => newChatId());
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const settings = useSettings();
-  const chats = useChats();
+  const prefs = usePrefs(identity.netid);
+  const chats = useChats(identity.netid);
+  const settings = useMemo(
+    () => toSettings(identity.netid, prefs),
+    [identity.netid, prefs]
+  );
 
   const navigate = useCallback((path: string, replace = false) => {
     if (replace) history.replaceState(null, "", path);
@@ -54,7 +74,8 @@ export function App() {
         open={sidebarOpen}
         navigate={navigate}
         chats={chats}
-        settings={settings}
+        identity={identity}
+        appCount={prefs.apps.length}
       />
       <div className="main">
         <div className="topbar">
@@ -79,6 +100,7 @@ export function App() {
               key={chatId}
               chatId={chatId}
               isDraft={route.chatId === null}
+              identity={identity}
               settings={settings}
               navigate={navigate}
             />
@@ -90,7 +112,9 @@ export function App() {
         {route.page === "agenda" && (
           <AgendaPage settings={settings} navigate={navigate} />
         )}
-        {route.page === "apps" && <AppsPage settings={settings} />}
+        {route.page === "apps" && (
+          <AppsPage identity={identity} settings={settings} />
+        )}
       </div>
     </div>
   );

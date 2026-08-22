@@ -28,10 +28,15 @@ browser (React + useAgentChat over WebSocket)
 - **Models**: Claude Opus 5 by default, with Sonnet 5 and a Workers AI
   fallback ("Campus") in the switcher. Claude models require the
   `ANTHROPIC_API_KEY` secret; without it every choice falls back to Campus.
-- **Identity**: dev-stub netid stored per browser and pushed with settings.
-  When Princeton Entra ID auth lands, replace the stub at one seam:
-  `engineHeaders()` in `src/server/pi.ts` (server) and the netid field in
-  `src/client/lib/store.ts` (client).
+- **Identity**: Princeton sign-in via Microsoft Entra ID (`src/server/auth.ts`
+  — OIDC auth code + PKCE, confidential client, signed HttpOnly session
+  cookie). netid is derived from the account email's local part; there is no
+  way to choose one. Every agent Durable Object is named `u-<netid>-…` and
+  the Worker rejects any request whose session doesn't own that prefix, so
+  chats (messages *and* workspace files) are strictly per user. Requires the
+  `ENTRA_TENANT_ID` / `ENTRA_CLIENT_ID` vars plus `ENTRA_CLIENT_SECRET` and
+  `SESSION_SECRET` secrets, and an app-registration redirect URI of
+  `<origin>/auth/callback` for every origin the app is served from.
 - **Planner**: mirrors TigerJunction's ReCal calendar — its default color
   palette, solid blocks with an ink left border for locked-in sections, and
   striped translucent blocks for section options not picked yet. The engine
@@ -68,6 +73,8 @@ Pushes to `main` deploy automatically via GitHub Actions
 ```bash
 npm run deploy
 npx wrangler secret put ANTHROPIC_API_KEY    # enables the Claude models
+npx wrangler secret put ENTRA_CLIENT_SECRET  # Entra app registration secret
+npx wrangler secret put SESSION_SECRET       # any long random string
 ```
 
 Config knobs (in `wrangler.jsonc`): `ENGINE_MCP_BASE` (engine base URL) and

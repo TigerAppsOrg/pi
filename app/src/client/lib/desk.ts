@@ -1,6 +1,7 @@
 import { useAgent } from "agents/react";
 import { useMemo, useRef, useState } from "react";
 import type { AppKey, PiSettings } from "../../shared/apps";
+import { userInstance } from "./auth";
 
 export type DeskState = {
   settings: PiSettings | null;
@@ -24,7 +25,7 @@ export function useDesk(settings: PiSettings) {
 
   const agent = useAgent({
     agent: "pi",
-    name: `desk-${settings.netid || "guest"}`,
+    name: userInstance(settings.netid, "desk"),
     onStateUpdate: (state: DeskState) => setDeskState(state),
     onMcpUpdate: (snapshot) => setMcp(snapshot as McpServersSnapshot),
   });

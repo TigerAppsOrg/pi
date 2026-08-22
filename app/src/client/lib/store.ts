@@ -1,16 +1,26 @@
 import { useSyncExternalStore } from "react";
-import { DEFAULT_SETTINGS, type PiSettings } from "../../shared/apps";
+import {
+  DEFAULT_APPS,
+  type AppKey,
+  type PiModel,
+  type PiSettings,
+} from "../../shared/apps";
 
 /**
- * Browser-local stores for settings and the chat list. Identity is a dev
- * stub for now — when EntraID auth lands, `settings.netid` gets replaced by
- * the authenticated principal and everything downstream stays the same.
+ * Browser-local stores, namespaced per signed-in netid so a shared machine
+ * never mixes people's chat lists or preferences. Identity itself comes from
+ * the Worker session (see lib/auth.ts) — nothing here decides who you are.
  */
 
 export type ChatMeta = { id: string; title: string; at: number };
 
-const SETTINGS_KEY = "pi:settings";
-const CHATS_KEY = "pi:chats";
+/** User-tweakable preferences; identity is never stored here. */
+export type Prefs = { apps: AppKey[]; model: PiModel };
+
+const DEFAULT_PREFS: Prefs = { apps: DEFAULT_APPS, model: "claude-opus-5" };
+
+const prefsKey = (netid: string) => `pi:u:${netid}:prefs`;
+const chatsKey = (netid: string) => `pi:u:${netid}:chats`;
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
@@ -22,7 +32,7 @@ function emit() {
 function subscribe(l: Listener) {
   listeners.add(l);
   const onStorage = (e: StorageEvent) => {
-    if (e.key === SETTINGS_KEY || e.key === CHATS_KEY) l();
+    if (e.key?.startsWith("pi:u:")) l();
   };
   window.addEventListener("storage", onStorage);
   return () => {
@@ -31,65 +41,70 @@ function subscribe(l: Listener) {
   };
 }
 
-function read<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? { ...fallback, ...(JSON.parse(raw) as T) } : fallback;
-  } catch {
-    return fallback;
-  }
-}
+const prefsCache = new Map<string, Prefs>();
+const chatsCache = new Map<string, ChatMeta[]>();
 
-let settingsCache: PiSettings | null = null;
-let chatsCache: ChatMeta[] | null = null;
-
-function getSettings(): PiSettings {
-  if (settingsCache == null) {
-    const s = read(SETTINGS_KEY, DEFAULT_SETTINGS);
-    // Migrate pre-switcher model values.
-    const legacy = s.model as string;
-    if (legacy === "auto" || legacy === "claude") s.model = "claude-opus-5";
-    settingsCache = s;
-  }
-  return settingsCache;
-}
-
-function getChats(): ChatMeta[] {
-  if (chatsCache == null) {
+function getPrefs(netid: string): Prefs {
+  if (!prefsCache.has(netid)) {
     try {
-      chatsCache = JSON.parse(localStorage.getItem(CHATS_KEY) ?? "[]");
+      const raw = localStorage.getItem(prefsKey(netid));
+      prefsCache.set(
+        netid,
+        raw ? { ...DEFAULT_PREFS, ...JSON.parse(raw) } : DEFAULT_PREFS
+      );
     } catch {
-      chatsCache = [];
+      prefsCache.set(netid, DEFAULT_PREFS);
     }
   }
-  return chatsCache!;
+  return prefsCache.get(netid)!;
 }
 
-export function saveSettings(next: PiSettings) {
-  settingsCache = next;
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+function getChats(netid: string): ChatMeta[] {
+  if (!chatsCache.has(netid)) {
+    try {
+      chatsCache.set(
+        netid,
+        JSON.parse(localStorage.getItem(chatsKey(netid)) ?? "[]")
+      );
+    } catch {
+      chatsCache.set(netid, []);
+    }
+  }
+  return chatsCache.get(netid)!;
+}
+
+export function savePrefs(netid: string, next: Prefs) {
+  prefsCache.set(netid, next);
+  localStorage.setItem(prefsKey(netid), JSON.stringify(next));
   emit();
 }
 
-export function upsertChat(meta: ChatMeta) {
-  const rest = getChats().filter((c) => c.id !== meta.id);
-  chatsCache = [meta, ...rest].slice(0, 200);
-  localStorage.setItem(CHATS_KEY, JSON.stringify(chatsCache));
+export function upsertChat(netid: string, meta: ChatMeta) {
+  const rest = getChats(netid).filter((c) => c.id !== meta.id);
+  const next = [meta, ...rest].slice(0, 200);
+  chatsCache.set(netid, next);
+  localStorage.setItem(chatsKey(netid), JSON.stringify(next));
   emit();
 }
 
-export function removeChat(id: string) {
-  chatsCache = getChats().filter((c) => c.id !== id);
-  localStorage.setItem(CHATS_KEY, JSON.stringify(chatsCache));
+export function removeChat(netid: string, id: string) {
+  const next = getChats(netid).filter((c) => c.id !== id);
+  chatsCache.set(netid, next);
+  localStorage.setItem(chatsKey(netid), JSON.stringify(next));
   emit();
 }
 
-export function useSettings(): PiSettings {
-  return useSyncExternalStore(subscribe, getSettings);
+export function usePrefs(netid: string): Prefs {
+  return useSyncExternalStore(subscribe, () => getPrefs(netid));
 }
 
-export function useChats(): ChatMeta[] {
-  return useSyncExternalStore(subscribe, getChats);
+export function useChats(netid: string): ChatMeta[] {
+  return useSyncExternalStore(subscribe, () => getChats(netid));
+}
+
+/** The wire settings a Pi agent instance expects. */
+export function toSettings(netid: string, prefs: Prefs): PiSettings {
+  return { netid, apps: prefs.apps, model: prefs.model };
 }
 
 export function newChatId(): string {

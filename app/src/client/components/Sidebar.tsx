@@ -1,4 +1,4 @@
-import type { PiSettings } from "../../shared/apps";
+import type { Identity } from "../lib/auth";
 import { removeChat, type ChatMeta } from "../lib/store";
 
 export type Route =
@@ -19,13 +19,15 @@ export function Sidebar({
   open,
   navigate,
   chats,
-  settings,
+  identity,
+  appCount,
 }: {
   route: Route;
   open: boolean;
   navigate: (path: string) => void;
   chats: ChatMeta[];
-  settings: PiSettings;
+  identity: Identity;
+  appCount: number;
 }) {
   const activeChatId = route.page === "chat" ? route.chatId : null;
 
@@ -86,7 +88,7 @@ export function Sidebar({
               aria-label={`Delete ${c.title}`}
               onClick={(e) => {
                 e.stopPropagation();
-                removeChat(c.id);
+                removeChat(identity.netid, c.id);
                 if (c.id === activeChatId) navigate("/");
               }}
             >
@@ -98,14 +100,12 @@ export function Sidebar({
 
       <button className="identity-chip" onClick={() => navigate("/apps")}>
         <span className="avatar" aria-hidden>
-          {(settings.netid || "?").slice(0, 1).toUpperCase()}
+          {identity.netid.slice(0, 1).toUpperCase()}
         </span>
         <span className="who">
-          <div className="netid">{settings.netid || "no netid yet"}</div>
+          <div className="netid">{identity.netid}</div>
           <div className="hint">
-            {settings.netid
-              ? `${settings.apps.length} app${settings.apps.length === 1 ? "" : "s"} connected`
-              : "set one on My apps"}
+            {appCount} app{appCount === 1 ? "" : "s"} connected
           </div>
         </span>
       </button>

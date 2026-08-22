@@ -84,6 +84,12 @@ export class Pi extends Think<Env, PiState> {
    */
   @callable()
   async setup(settings: PiSettings) {
+    // The Worker only routes a user to instances named `u-<netid>-…`, so
+    // requiring the same prefix here pins the MCP identity headers to the
+    // signed-in user — settings.netid can't be spoofed sideways.
+    if (!this.name.startsWith(`u-${settings.netid}-`)) {
+      throw new Error("identity mismatch: settings netid doesn't own this chat");
+    }
     const prev = this.getConfig<PiSettings>();
     const identityChanged = prev != null && prev.netid !== settings.netid;
     this.configure<PiSettings>(settings);

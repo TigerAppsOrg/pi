@@ -5,17 +5,23 @@ import {
   type AppKey,
   type PiSettings,
 } from "../../shared/apps";
+import { signOut, type Identity } from "../lib/auth";
 import { useDesk } from "../lib/desk";
 import { APP_INK } from "../lib/tools";
-import { saveSettings } from "../lib/store";
+import { savePrefs } from "../lib/store";
 
-export function AppsPage({ settings }: { settings: PiSettings }) {
+export function AppsPage({
+  identity,
+  settings,
+}: {
+  identity: Identity;
+  settings: PiSettings;
+}) {
   const desk = useDesk(settings);
-  const [netidDraft, setNetidDraft] = useState(settings.netid);
   const [saving, setSaving] = useState(false);
 
   async function apply(next: PiSettings) {
-    saveSettings(next);
+    savePrefs(identity.netid, { apps: next.apps, model: next.model });
     setSaving(true);
     try {
       await desk.agent.ready;
@@ -59,30 +65,25 @@ export function AppsPage({ settings }: { settings: PiSettings }) {
         </p>
 
         <div className="paper-card">
-          <h3>Who's asking</h3>
+          <h3>Signed in</h3>
           <div className="field-row">
-            <label htmlFor="netid">netid</label>
-            <input
-              id="netid"
-              className="text-input"
-              value={netidDraft}
-              placeholder="e.g. gw1234"
-              autoComplete="off"
-              onChange={(e) => setNetidDraft(e.target.value.trim())}
-            />
-            <button
-              className="new-chat"
-              style={{ margin: 0 }}
-              disabled={netidDraft === settings.netid}
-              onClick={() => void apply({ ...settings, netid: netidDraft })}
-            >
-              Save
+            <span className="avatar-lg" aria-hidden>
+              {identity.netid.slice(0, 1).toUpperCase()}
+            </span>
+            <span>
+              <div style={{ fontWeight: 650 }}>{identity.name}</div>
+              <div className="footnote" style={{ margin: 0 }}>
+                {identity.netid} · {identity.email}
+              </div>
+            </span>
+            <span style={{ flex: 1 }} />
+            <button className="sched-tab" onClick={signOut}>
+              Sign out
             </button>
           </div>
           <p className="footnote">
-            Schedules, degree progress, and seat alerts are looked up under
-            this netid. Princeton sign-in (Entra ID) replaces this box soon —
-            until then it's on the honor system.
+            Verified by Princeton sign-in — schedules, degree progress, and
+            seat alerts are looked up under this netid.
           </p>
         </div>
 

@@ -2,3 +2,11 @@
 # optional secrets show up on Env.
 ANTHROPIC_API_KEY=""
 ENGINE_MCP_TOKEN=""
+# Entra ID sign-in. Use a separate dev app registration with a
+# http://localhost:5173/auth/callback redirect URI; these override the vars
+# in wrangler.jsonc during local dev.
+ENTRA_TENANT_ID=""
+ENTRA_CLIENT_ID=""
+ENTRA_CLIENT_SECRET=""
+# Any long random string; signs the session cookie.
+SESSION_SECRET=""

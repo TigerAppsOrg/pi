@@ -34,14 +34,6 @@ export function PlannerPage({
     setSchedule(null);
     setSelected(null);
 
-    if (!settings.netid) {
-      setLoad({
-        kind: "blocked",
-        reason: "PI doesn't know who you are yet.",
-        cta: "Set your netid on My apps",
-      });
-      return;
-    }
     if (!junctionOn) {
       setLoad({
         kind: "blocked",
