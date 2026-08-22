@@ -18,6 +18,25 @@ const SUGGESTIONS = [
   "Does anything in my schedule conflict?",
 ];
 
+/**
+ * A stream interruption + recovery can split one utterance across several
+ * consecutive text parts (often mid-sentence). Rendering each part as its
+ * own markdown block tears sentences and lists apart, so stitch runs of
+ * text parts back together before rendering.
+ */
+function coalesceParts(parts: UIMessage["parts"]): UIMessage["parts"] {
+  const out: UIMessage["parts"] = [];
+  for (const part of parts) {
+    const last = out[out.length - 1];
+    if (part.type === "text" && last?.type === "text") {
+      out[out.length - 1] = { ...last, text: last.text + part.text };
+    } else {
+      out.push(part);
+    }
+  }
+  return out;
+}
+
 function messageText(m: UIMessage): string {
   return m.parts
     .map((p) => (p.type === "text" ? p.text : ""))
@@ -328,7 +347,7 @@ function Turn({
 
   return (
     <div className="turn assistant">
-      {message.parts.map((part, i) => {
+      {coalesceParts(message.parts).map((part, i) => {
         if (part.type === "text") {
           return part.text.trim() ? <Markdown key={i} text={part.text} /> : null;
         }

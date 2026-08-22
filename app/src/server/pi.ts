@@ -32,6 +32,12 @@ export class Pi extends Think<Env, PiState> {
   workspaceBash = false;
   waitForMcpConnections = { timeout: 15_000 };
   maxSteps = 12;
+  /**
+   * Abort-and-recover a model stream that parks without erroring — the
+   * cause of "spinning forever" turns. Set well above the slowest
+   * time-to-first-token plus the slowest MCP tool call.
+   */
+  chatStreamStallTimeoutMs = 120_000;
 
   getDefaultTimezone() {
     return "America/New_York";
