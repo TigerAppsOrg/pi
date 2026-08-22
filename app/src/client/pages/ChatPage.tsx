@@ -81,8 +81,8 @@ export function ChatPage({
     }
   });
 
-  async function ensureSetup() {
-    if (appliedRef.current === settingsHash) return;
+  async function ensureSetup(force = false) {
+    if (!force && appliedRef.current === settingsHash) return;
     appliedRef.current = settingsHash;
     try {
       await agent.ready;
@@ -112,7 +112,9 @@ export function ChatPage({
       title: firstTitle(messages) ?? text.slice(0, 48),
       at: Date.now(),
     });
-    await ensureSetup();
+    // Force a reconcile so connections made since the last message (like a
+    // Google Calendar consent finished on My apps) are live for this turn.
+    await ensureSetup(true);
     void sendMessage({ text });
   }
 
