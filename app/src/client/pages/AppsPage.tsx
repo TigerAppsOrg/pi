@@ -53,23 +53,22 @@ export function AppsPage({
   }
 
   function statusFor(key: AppKey): { text: string; cls: string } {
+    if (!settings.apps.includes(key)) return { text: "off", cls: "status" };
     if (desk.deskState?.authUrls?.[key]) {
       return { text: "one step left", cls: "status" };
     }
     const err = desk.deskState?.appErrors?.[key];
     if (err) return { text: `couldn't connect — ${err}`, cls: "status err" };
-    const server = desk.mcp?.servers?.[key];
-    if (!settings.apps.includes(key)) return { text: "off", cls: "status" };
     if (key === "princetoncourses" && settings.apps.includes("junction")) {
       return { text: "covered by TigerJunction", cls: "status on" };
     }
-    if (server?.state === "ready" || server?.state === "connected") {
-      return { text: "connected", cls: "status on" };
+    if (key === "gcal") {
+      return desk.deskState?.gcalReady
+        ? { text: "connected", cls: "status on" }
+        : { text: saving ? "connecting…" : "on", cls: "status" };
     }
-    if (server?.state === "failed") {
-      return { text: server.error ?? "connection failed", cls: "status err" };
-    }
-    return { text: saving ? "connecting…" : "on", cls: "status" };
+    // Engine connections open per turn, so "on" is the honest steady state.
+    return { text: "on", cls: "status on" };
   }
 
   return (
