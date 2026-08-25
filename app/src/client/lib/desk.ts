@@ -7,6 +7,7 @@ export type DeskState = {
   settings: PiSettings | null;
   appErrors: Partial<Record<AppKey, string>>;
   authUrls?: Partial<Record<AppKey, string>>;
+  gcalReady?: boolean;
 };
 
 export type McpServersSnapshot = {

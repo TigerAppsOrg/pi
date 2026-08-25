@@ -22,6 +22,8 @@ export type PiState = {
   appErrors: Partial<Record<AppKey, string>>;
   /** OAuth consent URLs awaiting the user (e.g. Google Calendar). */
   authUrls?: Partial<Record<AppKey, string>>;
+  /** Whether the desk holds Google tokens (chats can use the calendar). */
+  gcalReady?: boolean;
 };
 
 const CLAUDE_MODELS = new Set(["claude-opus-5", "claude-sonnet-5"]);
@@ -35,7 +37,12 @@ const CAMPUS_MODEL = "@cf/zai-org/glm-4.7-flash";
  * MCP endpoints, spoken over MCP v2 stateless streamable HTTP.
  */
 export class Pi extends Think<Env, PiState> {
-  initialState: PiState = { settings: null, appErrors: {}, authUrls: {} };
+  initialState: PiState = {
+    settings: null,
+    appErrors: {},
+    authUrls: {},
+    gcalReady: false,
+  };
 
   /** Pure chat agent — no shell tool. Workspace file tools stay available. */
   workspaceBash = false;
@@ -101,7 +108,7 @@ export class Pi extends Think<Env, PiState> {
    * a reconnect of every app.
    */
   @callable()
-  async setup(settings: PiSettings) {
+  async setup(settings: PiSettings, opts: { connect?: boolean } = {}) {
     // The Worker only routes a user to instances named `u-<netid>-…`, so
     // requiring the same prefix here pins the MCP identity headers to the
     // signed-in user — settings.netid can't be spoofed sideways.
@@ -148,6 +155,9 @@ export class Pi extends Think<Env, PiState> {
     const connectedIds = new Set(Object.keys(this.getMcpServers().servers));
     for (const app of PI_APPS) {
       if (!enabled.has(app.key) || connectedIds.has(app.key)) continue;
+      // Engine connections are only opened right before a turn (see
+      // releaseIdleMcp for why); Google is handled here for the consent flow.
+      if (app.key !== "gcal" && !opts.connect) continue;
       try {
         if (app.key === "gcal") {
           if (
@@ -209,8 +219,54 @@ export class Pi extends Think<Env, PiState> {
       else appErrors.gcal = "couldn't start Google sign-in — try again";
     }
 
-    this.setState({ settings, appErrors, authUrls });
-    return { ok: true as const, appErrors, authUrls };
+    const gcalReady = enabled.has("gcal")
+      ? this.isDesk()
+        ? await this.gcalTokensHas()
+        : await (await this.deskStub(settings.netid)).gcalTokensHas()
+      : false;
+
+    // Nothing is about to run — don't sit on open connections.
+    if (!opts.connect) await this.releaseIdleMcp();
+
+    this.setState({ settings, appErrors, authUrls, gcalReady });
+    return { ok: true as const, appErrors, authUrls, gcalReady };
+  }
+
+  /**
+   * A Durable Object holding live MCP connections never hibernates — it
+   * stays resident (and billed) around the clock even with zero traffic,
+   * while an identical object without them sleeps instantly. So PI keeps
+   * connections only for the duration of work: opened just before a turn or
+   * a direct tool call, released as soon as it ends, and swept on every
+   * wake in case a previous isolate left some behind.
+   */
+  private async releaseIdleMcp(): Promise<void> {
+    for (const [id, server] of Object.entries(this.getMcpServers().servers)) {
+      // Keep a Google connection that's mid-consent; its OAuth state lives
+      // on the connection row and the callback needs it.
+      if (id === "gcal" && server.state === "authenticating") continue;
+      try {
+        await this.removeMcpServer(id);
+      } catch (err) {
+        console.warn(`release ${id} failed`, err);
+      }
+    }
+  }
+
+  override async onStart(props?: Record<string, unknown>) {
+    await super.onStart(props);
+    await this.releaseIdleMcp();
+  }
+
+  override async onChatResponse(result: Parameters<Think["onChatResponse"]>[0]) {
+    await super.onChatResponse(result);
+    await this.releaseIdleMcp();
+  }
+
+  override async onChatError(error: unknown, ctx?: Parameters<Think["onChatError"]>[1]) {
+    const out = await super.onChatError(error, ctx);
+    await this.releaseIdleMcp();
+    return out;
   }
 
   /**
@@ -219,24 +275,33 @@ export class Pi extends Think<Env, PiState> {
    */
   @callable()
   async callAppTool(app: AppKey, name: string, args: Record<string, unknown>) {
+    const settings = this.getConfig<PiSettings>();
+    if (!settings?.apps.includes(app)) throw new Error(`${app} is switched off`);
     if (!this.getMcpServers().servers[app]) {
-      throw new Error(`${app} is not connected`);
+      await this.setup(settings, { connect: true });
+      if (!this.getMcpServers().servers[app]) {
+        throw new Error(`${app} is not connected`);
+      }
     }
-    const result = (await this.mcp.callTool({
-      serverId: app,
-      name,
-      arguments: args,
-    })) as {
-      isError?: boolean;
-      content?: Array<{ type: string; text?: string }>;
-    };
-    const text =
-      result.content?.find((c) => c.type === "text" && c.text)?.text ?? "";
-    if (result.isError) throw new Error(text || `${name} failed`);
     try {
-      return JSON.parse(text);
-    } catch {
-      return { text };
+      const result = (await this.mcp.callTool({
+        serverId: app,
+        name,
+        arguments: args,
+      })) as {
+        isError?: boolean;
+        content?: Array<{ type: string; text?: string }>;
+      };
+      const text =
+        result.content?.find((c) => c.type === "text" && c.text)?.text ?? "";
+      if (result.isError) throw new Error(text || `${name} failed`);
+      try {
+        return JSON.parse(text);
+      } catch {
+        return { text };
+      }
+    } finally {
+      await this.releaseIdleMcp();
     }
   }
 
@@ -345,6 +410,35 @@ export class Pi extends Think<Env, PiState> {
     if (row) manager.saveServerToStorage?.({ ...row, auth_url: url });
     console.log("gcal: consent pending, connection marked authenticating");
     return url;
+  }
+
+  /** TEMPORARY: what is keeping this object awake? */
+  @callable()
+  async diag() {
+    const alarm = await this.ctx.storage.getAlarm();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const self = this as any;
+    const sql = (q: string) => {
+      try {
+        return [...this.ctx.storage.sql.exec(q)];
+      } catch (e) {
+        return [String(e)];
+      }
+    };
+    return {
+      now: Date.now(),
+      alarmAt: alarm,
+      alarmInMs: alarm == null ? null : alarm - Date.now(),
+      keepAliveRefs: self._keepAliveRefs,
+      pendingFiberRecovery: typeof self._hasPendingFiberRecovery === "function" ? self._hasPendingFiberRecovery() : "n/a",
+      schedules: sql("SELECT id, callback, type, time, running FROM cf_agents_schedules"),
+      facetRuns: sql("SELECT COUNT(*) AS n FROM cf_agents_facet_runs"),
+      tables: sql("SELECT name FROM sqlite_master WHERE type='table'").map((r: { name?: string }) => r.name),
+      mcp: Object.fromEntries(
+        Object.entries(this.getMcpServers().servers).map(([id, s]) => [id, s.state])
+      ),
+      pendingMcp: Object.keys(self.mcp?._pendingConnections ?? {}),
+    };
   }
 
   /** The per-user desk instance is the token authority for Google OAuth. */

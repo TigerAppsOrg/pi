@@ -81,12 +81,17 @@ export function ChatPage({
     }
   });
 
-  async function ensureSetup(force = false) {
-    if (!force && appliedRef.current === settingsHash) return;
+  /**
+   * Push settings to the agent. With `connect`, it also opens the MCP
+   * connections a turn needs — connections are held only while work runs
+   * (an idle Durable Object with live MCP clients never hibernates).
+   */
+  async function ensureSetup(connect = false) {
+    if (!connect && appliedRef.current === settingsHash) return;
     appliedRef.current = settingsHash;
     try {
       await agent.ready;
-      await agent.call("setup", [settings]);
+      await agent.call("setup", [settings, { connect }]);
     } catch (err) {
       console.warn("PI setup failed", err);
       appliedRef.current = null;
@@ -112,8 +117,7 @@ export function ChatPage({
       title: firstTitle(messages) ?? text.slice(0, 48),
       at: Date.now(),
     });
-    // Force a reconcile so connections made since the last message (like a
-    // Google Calendar consent finished on My apps) are live for this turn.
+    // Open this turn's MCP connections (released again when the turn ends).
     await ensureSetup(true);
     void sendMessage({ text });
   }
@@ -233,7 +237,7 @@ export function ChatPage({
                 }
                 onRegenerate={
                   m.role === "assistant" && m.id === lastAssistantId
-                    ? () => void regenerate()
+                    ? () => void ensureSetup(true).then(() => regenerate())
                     : undefined
                 }
               />
