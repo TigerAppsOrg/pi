@@ -82,21 +82,24 @@ export function ChatPage({
   });
 
   /**
-   * Push settings to the agent. With `connect`, it also opens the MCP
-   * connections a turn needs — connections are held only while work runs
-   * (an idle Durable Object with live MCP clients never hibernates).
+   * Push settings to the agent (fast — MCP connections open server-side in
+   * beforeTurn, not here).
    */
-  async function ensureSetup(connect = false) {
-    if (!connect && appliedRef.current === settingsHash) return;
+  async function ensureSetup() {
+    if (appliedRef.current === settingsHash) return;
     appliedRef.current = settingsHash;
     try {
       await agent.ready;
-      await agent.call("setup", [settings, { connect }]);
+      await agent.call("setup", [settings]);
     } catch (err) {
       console.warn("PI setup failed", err);
       appliedRef.current = null;
     }
   }
+
+  // Sends run strictly in click order: a slow settings push for one message
+  // must never let a later message overtake it on the wire.
+  const sendChain = useRef(Promise.resolve());
 
   // Apply changed settings to a conversation that's already underway.
   useEffect(() => {
@@ -109,7 +112,7 @@ export function ChatPage({
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, status]);
 
-  async function send(text: string) {
+  function send(text: string) {
     startedRef.current = true;
     if (isDraft) navigate(`/chat/${chatId}`, true);
     upsertChat(identity.netid, {
@@ -117,9 +120,15 @@ export function ChatPage({
       title: firstTitle(messages) ?? text.slice(0, 48),
       at: Date.now(),
     });
-    // Open this turn's MCP connections (released again when the turn ends).
-    await ensureSetup(true);
-    void sendMessage({ text });
+    sendChain.current = sendChain.current.then(async () => {
+      // The first message of a chat needs settings on the server; bound the
+      // wait so a slow push can never swallow a message silently.
+      await Promise.race([
+        ensureSetup(),
+        new Promise((resolve) => setTimeout(resolve, 4000)),
+      ]);
+      void sendMessage({ text });
+    });
   }
 
   /** Copy history up to `endIndex` (exclusive) into a fresh chat. */
@@ -237,7 +246,7 @@ export function ChatPage({
                 }
                 onRegenerate={
                   m.role === "assistant" && m.id === lastAssistantId
-                    ? () => void ensureSetup(true).then(() => regenerate())
+                    ? () => void regenerate()
                     : undefined
                 }
               />
