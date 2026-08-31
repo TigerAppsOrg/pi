@@ -155,9 +155,10 @@ export class Pi extends Think<Env, PiState> {
     const connectedIds = new Set(Object.keys(this.getMcpServers().servers));
     for (const app of PI_APPS) {
       if (!enabled.has(app.key) || connectedIds.has(app.key)) continue;
-      // Engine connections are only opened right before a turn (see
-      // releaseIdleMcp for why); Google is handled here for the consent flow.
-      if (app.key !== "gcal" && !opts.connect) continue;
+      // Engine connections open right before a turn (see releaseIdleMcp for
+      // why); in a plain settings push only the desk's Google consent flow
+      // needs any connection work.
+      if (!opts.connect && !(app.key === "gcal" && this.isDesk())) continue;
       try {
         if (app.key === "gcal") {
           if (
@@ -251,6 +252,32 @@ export class Pi extends Think<Env, PiState> {
         console.warn(`release ${id} failed`, err);
       }
     }
+  }
+
+  /**
+   * Open this turn's MCP connections on the server, so the client can fire
+   * a message instantly instead of awaiting a connect round-trip first
+   * (which both delayed the echo of sent messages and let quick successive
+   * sends overtake each other). Think assembles its automatic MCP toolset
+   * before this hook runs — while nothing is connected — so the freshly
+   * connected tools are returned here to be merged into the turn.
+   */
+  override async beforeTurn(
+    ctx: Parameters<Think["beforeTurn"]>[0]
+  ): Promise<ReturnType<Think["beforeTurn"]> extends infer R ? Awaited<R> : never> {
+    const inherited = await super.beforeTurn(ctx);
+    const settings = this.getConfig<PiSettings>();
+    if (!settings) return inherited ?? undefined;
+    try {
+      await this.setup(settings, { connect: true });
+    } catch (err) {
+      console.warn("beforeTurn connect failed", err);
+    }
+    const tools = this.mcp.getAITools();
+    return {
+      ...(inherited ?? {}),
+      tools: { ...(inherited?.tools ?? {}), ...tools },
+    };
   }
 
   override async onStart(props?: Record<string, unknown>) {
