@@ -2,7 +2,8 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { Think } from "@cloudflare/think";
 import { callable, getAgentByName } from "agents";
 import type { AgentMcpOAuthProvider } from "agents/mcp/do-oauth-client-provider";
-import type { UIMessage } from "ai";
+import { hasToolCall, tool, type UIMessage } from "ai";
+import { z } from "zod";
 import {
   GCAL_CALLBACK_PATH,
   GCAL_MCP_URL,
@@ -13,6 +14,7 @@ import {
   DEFAULT_ENGINE_BASE,
   PI_APPS,
   type AppKey,
+  type PiApp,
   type PiSettings,
 } from "../shared/apps";
 
@@ -24,12 +26,100 @@ export type PiState = {
   authUrls?: Partial<Record<AppKey, string>>;
   /** Whether the desk holds Google tokens (chats can use the calendar). */
   gcalReady?: boolean;
+  /**
+   * Set when a turn started without its TigerApps — the answer is running on
+   * the model alone, and the interface should say so rather than let PI look
+   * like it simply forgot the student's courses. Cleared by the next
+   * successful settings push.
+   */
+  connectError?: string;
 };
 
 const CLAUDE_MODELS = new Set(["claude-opus-5", "claude-sonnet-5"]);
 const DEFAULT_CLAUDE_MODEL = "claude-opus-5";
 /** Free-plan-compatible Workers AI model with solid tool calling. */
 const CAMPUS_MODEL = "@cf/zai-org/glm-4.7-flash";
+
+/** The apps PI may ask a student to switch on. */
+const APP_KEYS = PI_APPS.map((a) => a.key) as [AppKey, ...AppKey[]];
+
+/**
+ * The two tools that hand the turn back to the student. Neither does any
+ * work: the interface draws the tool call itself — option rows, a consent
+ * card — and whatever the student taps arrives as their next message. They
+ * are merged in beforeTurn rather than declared in getTools() so they land
+ * after the MCP toolset, where no app server can shadow their names.
+ */
+const ELICITATION_TOOLS = {
+  offer_choices: tool({
+    description:
+      "Ask the student to pick from a short list of next steps or preferences. Use this instead of writing a numbered menu in your reply. The interface draws the options and their answer comes back as their next message, so end your turn right after calling this.",
+    inputSchema: z.object({
+      question: z
+        .string()
+        .describe("The question as you'd say it out loud — one short line."),
+      options: z
+        .array(
+          z.object({
+            label: z
+              .string()
+              .describe("What the student is choosing, a few words."),
+            detail: z
+              .string()
+              .optional()
+              .describe(
+                "One short line on what this option means or costs. Leave it out if the label says everything."
+              ),
+          })
+        )
+        // A bound, not just prose: an empty array would end the turn (see
+        // stopWhen) on a question the interface has nothing to draw.
+        .min(2)
+        .max(5)
+        .describe("Two to five options, in the order you'd recommend them."),
+      multi: z
+        .boolean()
+        .describe("True when more than one option can be picked."),
+      allowOther: z
+        .boolean()
+        .describe(
+          "True when a typed answer of their own makes sense alongside the options."
+        ),
+    }),
+    execute: async () =>
+      "Choices shown to the student. Their selection arrives as their next message. Do not answer for them — end your turn after any brief framing.",
+  }),
+  request_app: tool({
+    description:
+      "Ask the student to switch on an app you aren't connected to yet, with a concrete reason. Use this instead of telling them to go to the My apps page. The interface draws a card they can accept or decline, so end your turn right after calling this.",
+    inputSchema: z.object({
+      app: z.enum(APP_KEYS).describe("Which app you need."),
+      reason: z
+        .string()
+        .describe(
+          "One line on what switching it on would let you do for them right now."
+        ),
+    }),
+    execute: async ({ app }) => {
+      if (!PI_APPS.some((a) => a.key === app)) {
+        return `There's no app called "${app}". You can ask for: ${APP_KEYS.join(", ")}.`;
+      }
+      return `Consent card shown for ${app}. The student will decide; end your turn after a brief line — do not assume it was granted.`;
+    },
+  }),
+};
+
+/** "TigerJunction", "TigerJunction and TigerPath", "a, b and c". */
+function nameList(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** Tells the model an app the prompt claims it has isn't there this turn. */
+function missingAppsNote(names: string[]): string {
+  const many = names.length > 1;
+  return `${nameList(names)} ${many ? "are" : "is"} switched on but didn't connect for this turn, so none of ${many ? "their" : "its"} tools are in front of you. If the question needs ${many ? "them" : "it"}, say plainly that you can't see that right now — never answer it from memory instead.`;
+}
 
 /**
  * PI — a lightweight Princeton chat agent. One Durable Object instance per
@@ -77,7 +167,18 @@ export class Pi extends Think<Env, PiState> {
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "America/New_York",
     });
-    const connected = PI_APPS.filter((a) => settings?.apps.includes(a.key));
+    const enabled = new Set<AppKey>(settings?.apps ?? []);
+    const connected = PI_APPS.filter((a) => enabled.has(a.key));
+    // Whether these apps actually answered isn't known yet: this prompt is
+    // assembled before beforeTurn opens the connections, so an app that turns
+    // out to be down is corrected there (see missingAppsNote).
+    // Junction's MCP scope already covers PrincetonCourses (see setup), so
+    // don't invite the student to switch on a duplicate of what they have.
+    const offerable = PI_APPS.filter(
+      (a) =>
+        !enabled.has(a.key) &&
+        !(a.key === "princetoncourses" && enabled.has("junction"))
+    );
     return [
       "You are PI, the TigerApps assistant for Princeton students — a quick, warm study-desk companion. Your answers should read like notes from a sharp friend: concise, concrete, no filler.",
       "",
@@ -88,15 +189,31 @@ export class Pi extends Think<Env, PiState> {
       "",
       connected.length > 0
         ? `Connected TigerApps: ${connected.map((a) => `${a.name} (${a.tagline.toLowerCase()})`).join(", ")}.`
-        : "No TigerApps are connected. Tell the student to enable some on the My apps page if they ask for Princeton data.",
+        : "No TigerApps are connected, so you have no live Princeton data — don't answer course facts from memory.",
+      offerable.length > 0
+        ? `Switched off: ${offerable.map((a) => `${a.name} (key "${a.key}", ${a.tagline.toLowerCase()})`).join("; ")}. When one of these would answer the question, call request_app for it instead of working around it or sending the student off to a settings page.`
+        : "",
+      "",
+      "Voice:",
+      "- Lead with the answer. No preamble, no restating the question, no summary of what you just said.",
+      "- Write like a student who knows the catalog: specific course codes, times and numbers instead of adjectives.",
+      "- Sentence case. No exclamation marks, no emoji, no bold sprinkled for emphasis.",
+      "- Never narrate your own machinery — no talk of tools, connections, servers or models. Say what you found, or what you can't see.",
+      "- When you're unsure, say what you know and what you'd have to check.",
+      "",
+      "Asking the student instead of guessing:",
+      "- offer_choices — when the next step turns on a preference you can enumerate (which term, which of three courses, mornings or afternoons), call offer_choices with the question and two to five options. Set multi when several answers can be true, allowOther when a typed answer makes sense. Write at most one line of framing, then end your turn: their pick arrives as their next message.",
+      "- request_app — when the answer needs a TigerApp that's switched off, call request_app with its key and a concrete reason (\"TigerPath holds your requirement tree\"). End your turn after a short line, and don't assume they said yes.",
+      "- Google Calendar also needs a one-time Google sign-in on the My apps page, so say that when you request it.",
+      "- One of these per turn, and never write a menu of options out in prose — that's what offer_choices is for.",
       "",
       "Ground rules:",
       "- Princeton term codes end in 2 for Fall and 4 for Spring (e.g. 1272 = Fall 2026). When unsure which term is current, call list_terms rather than guessing.",
       "- The interface renders schedule and course tool results as visual cards automatically. After a tool call, add a short takeaway (conflicts, standouts, next step) — never re-list every row the card already shows.",
-      "- When a tool errors or returns nothing, say so plainly and suggest the closest thing you can do instead.",
-      "- Before destructive changes (deleting a schedule, removing courses), confirm with the student first.",
-      "- Keep answers tight. Prefer a short paragraph or a few bullets over headers and long lists.",
-      settings?.apps.includes("gcal")
+      "- When a tool errors or comes back empty, say plainly what didn't work and offer the closest thing you can still do. Never paste raw error text, URLs or status codes at the student.",
+      "- Confirm before anything that writes: adding or dropping a course, creating or editing a schedule, subscribing to a seat alert, deleting anything. Name exactly what you're about to change, then wait for a yes.",
+      "- Keep answers tight. Prefer a short paragraph or a few bullets over headers and long lists; if a comparison really needs a table, keep it to three columns.",
+      enabled.has("gcal")
         ? "- Google Calendar is connected read-only: use its tools for the student's real events and free/busy when planning around their week. You cannot modify their calendar."
         : "",
     ].join("\n");
@@ -196,7 +313,7 @@ export class Pi extends Think<Env, PiState> {
           },
         });
       } catch (err) {
-        appErrors[app.key] = err instanceof Error ? err.message : String(err);
+        appErrors[app.key] = this.connectFailure(app, err);
       }
     }
 
@@ -217,7 +334,7 @@ export class Pi extends Think<Env, PiState> {
     ) {
       const url = await this.forceGcalConsent();
       if (url) authUrls.gcal = url;
-      else appErrors.gcal = "couldn't start Google sign-in — try again";
+      else appErrors.gcal = "PI couldn't start the Google sign-in. Try again.";
     }
 
     const gcalReady = enabled.has("gcal")
@@ -231,6 +348,28 @@ export class Pi extends Think<Env, PiState> {
 
     this.setState({ settings, appErrors, authUrls, gcalReady });
     return { ok: true as const, appErrors, authUrls, gcalReady };
+  }
+
+  /**
+   * A failed connection is read by a student on their My apps card, so say
+   * it in words they can act on. The transport's own text stays in the logs,
+   * where it's useful.
+   */
+  private connectFailure(app: PiApp, err: unknown): string {
+    const raw = err instanceof Error ? err.message : String(err);
+    console.warn(`connect ${app.key} failed:`, raw);
+    const text = raw.toLowerCase();
+    const has = (...needles: string[]) => needles.some((n) => text.includes(n));
+    if (has("timeout", "timed out", "abort")) {
+      return `${app.name} took too long to answer. Try again in a minute.`;
+    }
+    if (has("401", "403", "unauthorized", "forbidden")) {
+      return `${app.name} wouldn't let PI in. That one's on us, not you.`;
+    }
+    if (has("fetch failed", "network") || /\b5\d\d\b/.test(text)) {
+      return `${app.name} is down right now. Try again later.`;
+    }
+    return `PI couldn't reach ${app.name}. Try again in a minute.`;
   }
 
   /**
@@ -260,7 +399,8 @@ export class Pi extends Think<Env, PiState> {
    * (which both delayed the echo of sent messages and let quick successive
    * sends overtake each other). Think assembles its automatic MCP toolset
    * before this hook runs — while nothing is connected — so the freshly
-   * connected tools are returned here to be merged into the turn.
+   * connected tools are returned here to be merged into the turn, along
+   * with the two tools PI uses to hand the turn back to the student.
    */
   override async beforeTurn(
     ctx: Parameters<Think["beforeTurn"]>[0]
@@ -268,15 +408,66 @@ export class Pi extends Think<Env, PiState> {
     const inherited = await super.beforeTurn(ctx);
     const settings = this.getConfig<PiSettings>();
     if (!settings) return inherited ?? undefined;
+    /** Apps the model was told it has, that this turn hasn't got. */
+    let missing: string[] = [];
     try {
-      await this.setup(settings, { connect: true });
+      const { appErrors } = await this.setup(settings, { connect: true });
+      // setup() files a dead app server under appErrors instead of throwing,
+      // so a turn can lose every course tool and still resolve here. Read what
+      // it reported rather than trusting that it came back at all.
+      missing = PI_APPS.filter((a) => appErrors[a.key]).map((a) => a.name);
+      const note =
+        missing.length > 0
+          ? `PI couldn’t use ${nameList(missing)} for this answer, so anything ${missing.length > 1 ? "they hold" : "it holds"} is missing.`
+          : undefined;
+      // A turn that did connect retires the last failure, so the interface
+      // stops warning about data this answer actually has. Only written when
+      // something changed — every setState reaches every client.
+      if (note !== this.state?.connectError) {
+        const { connectError: _prev, ...rest } = this.state;
+        this.setState(note ? { ...rest, connectError: note } : rest);
+      }
     } catch (err) {
       console.warn("beforeTurn connect failed", err);
+      missing = PI_APPS.filter((a) => settings.apps.includes(a.key)).map(
+        (a) => a.name
+      );
+      // The turn still runs, on the model alone. Leave a note in state so
+      // the interface can say so instead of quietly serving a thinner answer.
+      this.setState({
+        ...this.state,
+        connectError:
+          "PI couldn’t reach your TigerApps, so this answer may be missing course data.",
+      });
     }
     const tools = this.mcp.getAITools();
+    const inheritedStops = inherited?.stopWhen;
+    const stops = Array.isArray(inheritedStops)
+      ? inheritedStops
+      : inheritedStops
+        ? [inheritedStops]
+        : [];
     return {
       ...(inherited ?? {}),
-      tools: { ...(inherited?.tools ?? {}), ...tools },
+      // The system prompt is assembled before this hook runs, so a turn that
+      // lost an app can only correct the record here — otherwise the model
+      // reads "Connected TigerApps: TigerJunction" and answers with the
+      // confidence that implies, on no data at all.
+      ...(missing.length > 0
+        ? {
+            system: `${inherited?.system ?? ctx.system}\n\n${missingAppsNote(missing)}`,
+          }
+        : {}),
+      // The elicitation tools go on last: an app server can register any
+      // tool name it likes, and these two have to survive the merge.
+      tools: { ...(inherited?.tools ?? {}), ...tools, ...ELICITATION_TOOLS },
+      // Eliciting ends the turn — the student's answer is the next message,
+      // so don't let the model talk past its own question.
+      stopWhen: [
+        ...stops,
+        hasToolCall("offer_choices"),
+        hasToolCall("request_app"),
+      ],
     };
   }
 

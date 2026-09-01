@@ -1,5 +1,6 @@
 import type { Meeting, ScheduleView } from "../lib/tools";
 import { fmtRange, tjColor } from "../lib/tools";
+import { IconExternal } from "./Icons";
 
 const DAY_COLUMNS = [
   ["Monday", "M"],
@@ -139,7 +140,7 @@ export function WeekGrid({
                       color: tjColor(m.color, 60),
                       animationDelay: `${(di * 3 + i) * 0.02}s`,
                     }}
-                    title={`${m.courseCode} ${m.label} · ${m.startLabel}–${m.endLabel}${m.room ? ` · ${m.room}` : ""}${m.confirmed ? "" : " · option — pick in TigerJunction"}`}
+                    title={`${m.courseCode} ${m.label} · ${m.startLabel}–${m.endLabel}${m.room ? ` · ${m.room}` : ""}${m.confirmed ? "" : " · option, pick in TigerJunction"}`}
                   >
                     {!compact && duration >= 45 && cols <= 2 && (
                       <div className="btime">
@@ -189,20 +190,21 @@ export function WeekGrid({
 
       {schedule.conflicts.length > 0 && (
         <div className="conflict-note">
-          <span className="lead">heads up — </span>
+          <span className="lead">heads up: </span>
           {schedule.conflicts.join("; ")}
         </div>
       )}
 
       {!compact && hasOptions && (
         <p className="tba-note">
-          Striped blocks are section options you haven't locked in —{" "}
+          Striped blocks are section options you haven't locked in.{" "}
           <a
             href="https://junction.tigerapps.org"
             target="_blank"
             rel="noreferrer"
           >
-            pick them in TigerJunction ↗
+            Pick them in TigerJunction
+            <IconExternal size={12} />
           </a>
         </p>
       )}
