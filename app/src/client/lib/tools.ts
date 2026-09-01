@@ -455,6 +455,115 @@ export function extractCourses(data: unknown): CourseRowData[] | null {
   return rows.length > 0 ? rows : null;
 }
 
+/* ── evaluation extraction (PrincetonCourses evidence card) ──────── */
+
+export type ReviewQuote = {
+  text: string;
+  /** Term or instructor the review is attached to, when the payload says. */
+  from: string | null;
+};
+
+export type EvalLink = {
+  /** Short badge text: "reviews", "QCR", "PDF". */
+  label: string;
+  href: string;
+  /** Drives the badge colour. */
+  kind: "reviews" | "qcr" | "pdf";
+};
+
+export type EvaluationView = {
+  code: string | null;
+  title: string | null;
+  /** Out of 5, as PrincetonCourses reports it. */
+  rating: number | null;
+  /** Only set when the payload carries a real count — never inferred. */
+  count: number | null;
+  quotes: ReviewQuote[];
+  links: EvalLink[];
+};
+
+/**
+ * Recognizes a single-course evaluations payload: a rating and/or written
+ * student reviews. Everything here is read straight off the payload — no
+ * link is ever synthesized from a pattern the engine didn't hand us, apart
+ * from the PrincetonCourses course page (which pcCourseUrl already derives
+ * from the registrar guid).
+ */
+export function extractEvaluations(data: unknown): EvaluationView | null {
+  if (data == null || typeof data !== "object") return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = data as any;
+  // The course itself may be the root, or nested one level down.
+  const c = d.course ?? d.evaluation ?? d.evaluations ?? d;
+  if (c == null || typeof c !== "object") return null;
+
+  const quotes = readQuotes(d.reviews ?? d.comments ?? c.reviews ?? c.comments);
+  const rating = firstNumber([
+    c.rating,
+    c.overallRating,
+    c.score,
+    d.rating,
+    d.overallRating,
+  ]);
+  if (quotes.length === 0 && rating == null) return null;
+
+  const links: EvalLink[] = [];
+  const pc = pcCourseUrl(c) ?? pcCourseUrl(d);
+  if (pc) links.push({ label: "reviews", href: pc, kind: "reviews" });
+  const qcr = firstUrl([c.qcrUrl, c.evaluationUrl, d.qcrUrl, d.evaluationUrl]);
+  if (qcr) links.push({ label: "QCR", href: qcr, kind: "qcr" });
+  const pdf = firstUrl([c.pdfUrl, c.reportUrl, d.pdfUrl, d.reportUrl]);
+  if (pdf) links.push({ label: "PDF", href: pdf, kind: "pdf" });
+
+  const code = c.code ?? c.courseCode ?? c.course ?? d.code ?? null;
+  return {
+    code: code ? String(code) : null,
+    title: c.title ?? c.name ? String(c.title ?? c.name) : null,
+    rating,
+    count: firstNumber([c.numRatings, c.reviewCount, c.ratingCount, d.count]),
+    quotes: quotes.slice(0, 3),
+    links,
+  };
+}
+
+function readQuotes(list: unknown): ReviewQuote[] {
+  if (!Array.isArray(list)) return [];
+  const out: ReviewQuote[] = [];
+  for (const item of list) {
+    let text: string | null = null;
+    let from: string | null = null;
+    if (typeof item === "string") {
+      text = item;
+    } else if (item && typeof item === "object") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const o = item as any;
+      const raw = o.comment ?? o.text ?? o.review ?? o.body;
+      if (typeof raw === "string") text = raw;
+      const tag = o.termName ?? o.instructor ?? o.semester;
+      if (typeof tag === "string" && tag.trim()) from = tag.trim();
+      else if (typeof o.term === "number") from = termCodeToName(o.term);
+    }
+    const trimmed = text?.trim();
+    if (!trimmed) continue;
+    out.push({ text: trimmed, from });
+  }
+  return out;
+}
+
+function firstNumber(candidates: unknown[]): number | null {
+  for (const v of candidates) {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
+function firstUrl(candidates: unknown[]): string | null {
+  for (const v of candidates) {
+    if (typeof v === "string" && /^https?:\/\//.test(v)) return v;
+  }
+  return null;
+}
+
 /** Princeton term code → name, e.g. 1272 → "Fall 2026", 1274 → "Spring 2027". */
 export function termCodeToName(code: number): string | null {
   const s = String(code);
@@ -487,3 +596,72 @@ export const APP_INK: Record<AppKey, string> = {
   snatch: "var(--hl-pink)",
   gcal: "var(--hl-mint)",
 };
+
+/**
+ * What to call the source of a tool call in front of a student. Tools PI
+ * runs on its own (Think's file tools) belong to PI, not to a "workspace".
+ */
+export function appDisplayName(app: AppKey | null): string {
+  return PI_APPS.find((a) => a.key === app)?.name ?? "PI's desk";
+}
+
+/* ── elicitation parts ───────────────────────────────────────────── */
+
+/**
+ * Two server tools render as UI instead of text. Their part types are
+ * `tool-offer_choices` and `tool-request_app`; the shapes below must stay in
+ * step with the zod schemas in src/server/pi.ts.
+ */
+
+export type ChoiceOption = { label: string; detail: string | null };
+
+export type ChoicesAsk = {
+  question: string;
+  options: ChoiceOption[];
+  multi: boolean;
+  allowOther: boolean;
+};
+
+export type AppRequest = { app: AppKey; reason: string };
+
+export const CHOICES_PART = "tool-offer_choices";
+export const APP_REQUEST_PART = "tool-request_app";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function parseChoicesAsk(part: any): ChoicesAsk | null {
+  if (part?.type !== CHOICES_PART) return null;
+  // A half-streamed input would flicker rows in and out as it arrives.
+  if (part.state === "input-streaming") return null;
+  const input = part.input;
+  if (!input || typeof input !== "object") return null;
+  const question = typeof input.question === "string" ? input.question : "";
+  const options: ChoiceOption[] = [];
+  if (Array.isArray(input.options)) {
+    for (const o of input.options) {
+      const label = typeof o?.label === "string" ? o.label.trim() : "";
+      if (!label) continue;
+      const detail = typeof o?.detail === "string" ? o.detail.trim() : "";
+      options.push({ label, detail: detail || null });
+    }
+  }
+  // A question with nothing to pick from is a text turn, not an ask.
+  if (!question || options.length === 0) return null;
+  return {
+    question,
+    options,
+    multi: input.multi === true,
+    allowOther: input.allowOther === true,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function parseAppRequest(part: any): AppRequest | null {
+  if (part?.type !== APP_REQUEST_PART) return null;
+  if (part.state === "input-streaming") return null;
+  const input = part.input;
+  if (!input || typeof input !== "object") return null;
+  const app = PI_APPS.find((a) => a.key === input.app);
+  if (!app) return null;
+  const reason = typeof input.reason === "string" ? input.reason.trim() : "";
+  return { app: app.key, reason };
+}

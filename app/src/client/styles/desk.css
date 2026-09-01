@@ -1,0 +1,582 @@
+/**
+ * The desk pages: My apps, Daily summary, Planner. Imported from those three
+ * components, so it lands after the design system in the bundle and wins
+ * ties. Everything here is built from the shared tokens and primitives in
+ * styles.css — no new colours, no new easing.
+ */
+
+/* ── shared page furniture ────────────────────────────────────────── */
+
+/* the second word of a page title, written by hand over a marker swipe */
+.ink-word {
+  font-family: var(--hand);
+  font-size: 1.3em;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--pi-deep);
+}
+.ink-word.swipe {
+  --swipe-color: var(--hl-cyan);
+}
+
+.desk-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-5);
+}
+.desk-head .page-title,
+.desk-head .page-sub {
+  margin-bottom: var(--space-2);
+}
+.desk-head-copy {
+  flex: 1 1 340px;
+  max-width: 56ch;
+}
+
+/* section heads sit under a hand-drawn rule, like a ruled notebook page */
+.desk-section {
+  margin-top: var(--space-6);
+}
+.desk-section > h2 {
+  font-size: var(--t-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.desk-section > .hand-rule {
+  margin: 6px 0 var(--space-3);
+  --underline-color: var(--ink-ghost);
+}
+
+/* a failed card: says what broke, offers the way out, keeps the raw text in
+   a title attribute rather than in PI's handwriting */
+.card-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--edge-danger);
+  border-radius: var(--r-md);
+  background: var(--stock-note);
+}
+.card-error p {
+  flex: 1;
+  margin: 0;
+  font-size: var(--t-md);
+  color: var(--ink-soft);
+}
+.card-error .btn {
+  flex-shrink: 0;
+}
+
+/* ── my apps ──────────────────────────────────────────────────────── */
+
+.master-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--r-md);
+  background: var(--paper-sunk);
+  max-width: 320px;
+}
+.master-switch .master-label {
+  display: block;
+  font-family: var(--hand);
+  font-size: var(--t-xl);
+  line-height: 1.1;
+}
+.master-switch .footnote {
+  display: block;
+  margin-top: 2px;
+}
+
+/* a note that interrupts the page: consent failed, settings didn't save */
+.page-note {
+  margin-bottom: var(--space-5);
+}
+
+.app-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  column-gap: var(--space-6);
+}
+@media (min-width: 760px) {
+  .app-list.two-up {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.app-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+/* squircle, tilted a hair, so a shelf of them reads as stickers not tiles */
+.app-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  transform: rotate(-2deg);
+  font-weight: 700;
+  font-size: var(--t-md);
+  letter-spacing: 0.02em;
+  color: rgba(34, 38, 46, 0.78);
+  box-shadow: var(--shadow-sheet);
+}
+.app-mark img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
+}
+.app-row.is-soon .app-mark {
+  box-shadow: none;
+  opacity: 0.72;
+  font-family: var(--hand);
+  font-size: var(--t-xl);
+}
+
+.app-copy {
+  flex: 1;
+  min-width: 0;
+}
+.app-name {
+  margin: 0;
+  font-size: var(--t-base);
+  font-weight: 700;
+  line-height: 1.3;
+}
+.app-blurb {
+  margin: 3px 0 0;
+  font-size: var(--t-md);
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+.app-reads {
+  margin: var(--space-2) 0 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.app-reads .icon {
+  color: var(--ink-ghost);
+}
+.app-note {
+  margin: var(--space-2) 0 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--t-sm);
+  color: var(--ink-soft);
+}
+.app-note.is-err {
+  color: var(--ink-danger);
+}
+.app-note.is-good {
+  color: var(--ink-good);
+}
+
+.app-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+.app-launch {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-sm);
+  color: var(--ink-faint);
+  transition: color var(--dur-1) var(--ease-out),
+    background-color var(--dur-1) var(--ease-out);
+}
+.app-launch:hover {
+  color: var(--pi-deep);
+  background: var(--pi-wash);
+}
+
+/* toggles in flight: the row says so instead of pretending it already saved */
+.toggle[disabled] {
+  cursor: progress;
+  opacity: 0.6;
+}
+.toggle[aria-busy="true"] {
+  background: var(--hl-cyan);
+}
+
+.connect-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.desk-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--rule-soft);
+}
+.desk-identity .who {
+  flex: 1;
+  min-width: 0;
+}
+.desk-identity .name {
+  font-weight: 600;
+  font-size: var(--t-nav);
+}
+
+/* ── daily summary ────────────────────────────────────────────────── */
+
+.agenda-top {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+.agenda-note {
+  max-width: 34ch;
+  font-size: var(--t-md);
+  color: var(--ink);
+}
+.agenda-note .lead {
+  display: block;
+  margin-top: 2px;
+}
+
+.module-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+@media (min-width: 780px) {
+  .module-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* the real one gets the wide slot; teasers sit beside each other */
+  .module.is-wide {
+    grid-column: 1 / -1;
+  }
+}
+
+.module {
+  margin-bottom: 0;
+}
+.module-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  font-size: var(--t-md);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+}
+.module-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid rgba(74, 60, 40, 0.18);
+  flex-shrink: 0;
+}
+.module-head .soon-chip {
+  margin-left: auto;
+}
+
+.module-q {
+  margin: 0;
+  font-size: var(--t-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.module-q-2 {
+  margin-top: var(--space-5);
+}
+.back-arrow {
+  transform: rotate(180deg);
+}
+.module-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.row-skel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+}
+.row-skel .skel-line:nth-child(1) {
+  width: 78%;
+}
+.row-skel .skel-line:nth-child(2) {
+  width: 62%;
+}
+.row-skel .skel-line:nth-child(3) {
+  width: 70%;
+}
+.module-date {
+  margin: 2px 0 var(--space-4);
+  font-size: var(--t-md);
+  color: var(--ink-soft);
+}
+.module-date .day-hand {
+  font-family: var(--hand);
+  font-size: var(--t-xl);
+  color: var(--pi-deep);
+}
+
+/* today's classes, as blocks lifted off the week grid */
+.day-blocks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.day-block {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r-sm);
+  border-left: 3px solid;
+  font-size: var(--t-md);
+}
+.day-block .btime {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.day-block .bcode {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.day-block .bwhere {
+  margin-left: auto;
+  font-size: var(--t-sm);
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.day-block.is-option {
+  border-left-style: dashed;
+}
+
+/* Scoped: App.tsx's route skeleton ships a taller .skel-block of its own. */
+.day-blocks .skel-block {
+  height: 34px;
+  border-radius: var(--r-sm);
+}
+
+/* the registration countdown. Only ever rendered from a real term date. */
+.reg-callout {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border-radius: var(--r-md);
+  background: var(--pi-wash);
+}
+.reg-num {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 var(--space-2);
+  border-radius: var(--r-sm);
+  background: var(--paper-raised);
+  color: var(--pi-deep);
+  font-family: var(--hand);
+  font-size: var(--t-2xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transform: rotate(-1.5deg);
+  flex-shrink: 0;
+}
+.reg-callout .reg-what {
+  font-size: var(--t-md);
+  font-weight: 600;
+}
+.reg-callout .timestamp {
+  display: block;
+  font-weight: 400;
+}
+
+.module-foot {
+  margin-top: var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.module-foot .hand-line {
+  font-family: var(--hand);
+  font-size: var(--t-xl);
+  color: var(--ink-soft);
+  line-height: 1.2;
+}
+
+/* where a module's data actually comes from — read before the data, so it
+   sits above the first question rather than under the last row */
+.module-source {
+  margin: 0 0 var(--space-3);
+}
+
+.module-empty {
+  font-family: var(--hand);
+  font-size: var(--t-xl);
+  color: var(--ink-faint);
+  margin: 0;
+  padding: var(--space-4) 0;
+}
+.module-empty .cta {
+  display: inline-block;
+  margin-top: var(--space-2);
+  font-family: var(--sans);
+  font-size: var(--t-md);
+  font-weight: 600;
+  color: var(--pi-deep);
+}
+
+/* teaser modules: a different material, so nothing reads as shipped */
+.module.is-soon {
+  border: 1px dashed var(--rule);
+  border-radius: var(--r-lg);
+  background: transparent;
+  box-shadow: none;
+  padding: var(--space-4) var(--space-5);
+}
+.module.is-soon .module-head {
+  color: var(--ink-faint);
+}
+.module.is-soon p {
+  margin: 0;
+  font-size: var(--t-md);
+  color: var(--ink-soft);
+}
+.hall-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+.hall-tags li {
+  display: contents;
+}
+.ghost-rows {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ghost-row {
+  height: 30px;
+  border: 1px dashed var(--ink-ghost);
+  border-radius: var(--r-sm);
+  opacity: 0.5;
+}
+.ghost-row:nth-child(2) {
+  width: 82%;
+}
+.ghost-row:nth-child(3) {
+  width: 64%;
+}
+
+/* ── planner ──────────────────────────────────────────────────────── */
+
+/* the week grid keeps its shape and scrolls inside itself on a phone */
+.week-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 700px) {
+  /* only the grid keeps its width; the legend and notes below still wrap */
+  .week-scroll .week {
+    min-width: 600px;
+  }
+}
+
+.picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.picker .picker-label {
+  font-size: var(--t-md);
+  color: var(--ink-soft);
+}
+
+/* two link-outs sitting side by side in an empty state */
+.empty-hand .cta + .cta {
+  margin-left: var(--space-4);
+}
+
+.week-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--pi-deep);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sheet-skel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.sheet-skel .skel-line:nth-child(1) {
+  width: 40%;
+}
+.sheet-skel .skel-line:nth-child(2) {
+  width: 88%;
+}
+.sheet-skel .skel-line:nth-child(3) {
+  width: 72%;
+}
+.sheet-skel .skel-line:nth-child(4) {
+  width: 80%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-launch,
+  .toggle,
+  .toggle::after {
+    transition: none;
+  }
+}

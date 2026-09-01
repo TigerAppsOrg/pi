@@ -2,17 +2,29 @@ import { useState } from "react";
 import { PI_APPS } from "../../shared/apps";
 import {
   APP_INK,
+  appDisplayName,
   extractCourses,
+  extractEvaluations,
   extractSchedule,
+  type EvaluationView,
   type ToolView,
 } from "../lib/tools";
+import { IconExternal } from "./Icons";
 import { WeekGrid } from "./WeekGrid";
 
 const MAX_ROWS = 8;
 
 /**
- * Replaces raw tool calls with renders: a planner for schedules, rows for
- * course lists, and a quiet chip for everything else.
+ * Raw payloads are for `?debug=1` only. A student should never meet an MCP
+ * tool name or a JSON dump inside an answer.
+ */
+const DEBUG =
+  typeof location !== "undefined" &&
+  new URLSearchParams(location.search).has("debug");
+
+/**
+ * Replaces raw tool calls with renders: a planner for schedules, an evidence
+ * card for evaluations, rows for course lists, and a quiet chip otherwise.
  */
 export function ToolRender({ view }: { view: ToolView }) {
   const running =
@@ -35,7 +47,7 @@ export function ToolRender({ view }: { view: ToolView }) {
             target="_blank"
             rel="noreferrer"
           >
-            Open {app.name} ↗
+            Open {app.name} <IconExternal size={12} />
           </a>
         )}
       </ToolChip>
@@ -45,7 +57,7 @@ export function ToolRender({ view }: { view: ToolView }) {
   if (running) {
     return (
       <ToolChip view={view} running>
-        checking…
+        checking {appDisplayName(view.app)}…
       </ToolChip>
     );
   }
@@ -59,11 +71,11 @@ export function ToolRender({ view }: { view: ToolView }) {
         label={cardLabel(view, schedule.termName)}
         link={{
           href: `${junction.home}/recalplus`,
-          label: "Open in TigerJunction ↗",
+          label: "Open in TigerJunction",
         }}
       >
         {schedule.title && (
-          <p style={{ margin: "0 0 10px", fontWeight: 600, fontSize: 14 }}>
+          <p className="card-title">
             {schedule.title}
             {schedule.termName ? ` · ${schedule.termName}` : ""}
           </p>
@@ -73,7 +85,23 @@ export function ToolRender({ view }: { view: ToolView }) {
     );
   }
 
+  // Evidence is read off the payload, never off which app ran the tool: with
+  // TigerJunction on, its scope serves the evaluation tools and PrincetonCourses
+  // never connects (see setup in server/pi.ts), so an app gate here would hide
+  // the card from every student on the default apps. A list of courses is rows,
+  // not evidence, so that shape wins.
   const courses = extractCourses(view.data);
+  if (!courses) {
+    const evaluation = extractEvaluations(view.data);
+    if (evaluation) {
+      return (
+        <ToolCard view={view} label={cardLabel(view)}>
+          <Evidence evaluation={evaluation} />
+        </ToolCard>
+      );
+    }
+  }
+
   if (courses) {
     const shown = courses.slice(0, MAX_ROWS);
     return (
@@ -87,7 +115,7 @@ export function ToolRender({ view }: { view: ToolView }) {
                   href={c.pcUrl}
                   target="_blank"
                   rel="noreferrer"
-                  title="Ratings & reviews on PrincetonCourses ↗"
+                  title="Ratings and reviews on PrincetonCourses"
                 >
                   <span className="code">{c.code}</span>
                   <span className="ctitle">{c.title}</span>
@@ -108,14 +136,18 @@ export function ToolRender({ view }: { view: ToolView }) {
         </div>
         {courses.length > shown.length && (
           <div className="card-more">
-            +{courses.length - shown.length} more — ask PI to narrow it down
+            {courses.length - shown.length} more. Ask PI to narrow it down.
           </div>
         )}
       </ToolCard>
     );
   }
 
-  return <ToolChip view={view} running={false} />;
+  return (
+    <ToolChip view={view} running={false}>
+      checked {appDisplayName(view.app)}
+    </ToolChip>
+  );
 }
 
 export function StatusPill({ status }: { status: string }) {
@@ -130,10 +162,67 @@ export function StatusPill({ status }: { status: string }) {
   return <span className={`pill ${cls}`}>{status}</span>;
 }
 
+/** The wireframe's evidence treatment: what students actually wrote. */
+function Evidence({ evaluation }: { evaluation: EvaluationView }) {
+  const { code, title, rating, count, quotes, links } = evaluation;
+  return (
+    <div className="evidence">
+      <div className="head-line">
+        {code && (
+          <span className="course-chip">
+            {code}
+            {title && <span className="of">{title}</span>}
+          </span>
+        )}
+        {rating != null && (
+          <span className="rating-pill">
+            {rating.toFixed(2)}
+            <span className="out-of">out of 5</span>
+          </span>
+        )}
+        {links.length > 0 && (
+          <span className="eval-links">
+            {links.map((l) => (
+              <a
+                key={l.href}
+                className={`eval-link ${l.kind}`}
+                href={l.href}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {l.label}
+                <IconExternal size={11} />
+              </a>
+            ))}
+          </span>
+        )}
+      </div>
+      {count != null && (
+        <p className="label-xs">{count} students rated it</p>
+      )}
+      {quotes.length > 0 && (
+        <div className="quotes">
+          {quotes.map((q, i) => (
+            <blockquote key={i} className="quote">
+              <span className="mark" aria-hidden>
+                &ldquo;
+              </span>
+              <span className="said">
+                {q.text}
+                {q.from && <span className="from">{q.from}</span>}
+              </span>
+            </blockquote>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AppDot({ view }: { view: ToolView }) {
   const app = PI_APPS.find((a) => a.key === view.app);
   if (app) {
-    return <img className="app-logo-sm" src={app.logo} alt={app.name} />;
+    return <img className="app-logo-sm" src={app.logo} alt="" />;
   }
   return (
     <span
@@ -145,12 +234,10 @@ function AppDot({ view }: { view: ToolView }) {
   );
 }
 
-function appName(view: ToolView): string {
-  return PI_APPS.find((a) => a.key === view.app)?.name ?? "workspace";
-}
-
 function cardLabel(view: ToolView, suffix?: string): string {
-  return [appName(view), suffix].filter(Boolean).join(" · ");
+  return [`From ${appDisplayName(view.app)}`, suffix]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function shortError(text: string | null): string {
@@ -182,10 +269,10 @@ function ToolCard({
             target="_blank"
             rel="noreferrer"
           >
-            {link.label}
+            {link.label} <IconExternal size={12} />
           </a>
         )}
-        <span className="tname">{view.base}</span>
+        {DEBUG && <span className="tname">{view.base}</span>}
       </div>
       <div className="card-body">{children}</div>
     </div>
@@ -204,14 +291,14 @@ function ToolChip({
   children?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const expandable = !running && view.data != null;
+  const expandable = DEBUG && !running && view.data != null;
   return (
     <div>
       <div
         className={`tool-chip${running ? " running" : ""}${error ? " error" : ""}`}
       >
         <AppDot view={view} />
-        <span className="tname">{view.base}</span>
+        {DEBUG && <span className="tname">{view.base}</span>}
         {children && <span>{children}</span>}
         {expandable && (
           <button onClick={() => setOpen(!open)}>

@@ -1,0 +1,651 @@
+/**
+ * Shell lane: the sidebar, the mobile drawer, the sign-in front door, route
+ * placeholders, the 404 and the session-lapse card.
+ *
+ * Loaded after src/client/styles.css (main.tsx imports the design system
+ * first), so plain overrides of shared classes land without !important.
+ */
+
+/* ── keyboard entry ───────────────────────────────────────────────── */
+.skip-link {
+  position: fixed;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 100;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  color: var(--on-ink);
+  font-size: var(--t-md);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(calc(-100% - var(--space-4)));
+  transition: transform var(--dur-2) var(--ease-out);
+}
+.skip-link:focus-visible {
+  transform: none;
+}
+
+/* the main region takes focus on a route change; it must not draw a ring */
+.main:focus {
+  outline: none;
+}
+
+/* ── wordmark ─────────────────────────────────────────────────────── */
+.sidebar .wordmark {
+  gap: var(--space-2);
+}
+.sidebar .wordmark .name {
+  line-height: 1.1;
+}
+.sidebar .wordmark .sub {
+  margin-top: -1px;
+}
+.drawer-close {
+  display: none;
+  margin-left: auto;
+  padding: var(--space-1);
+  border-radius: var(--r-sm);
+  color: var(--ink-soft);
+}
+.drawer-close:hover {
+  background: var(--rule-soft);
+  color: var(--ink);
+}
+
+/* ── new chat ─────────────────────────────────────────────────────── */
+/* the wireframe's row, not a filled pill: a black dot carries the weight */
+.sidebar .new-chat {
+  background: transparent;
+  color: var(--ink);
+  text-decoration: none;
+  gap: var(--space-3);
+  /* the dot lines up with the nav icons below it */
+  margin: 0 0 var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--r-sm);
+}
+.sidebar .new-chat:hover {
+  background: var(--rule-soft);
+  transform: none;
+  box-shadow: none;
+}
+.sidebar .new-chat:active {
+  transform: none;
+  box-shadow: none;
+}
+.plus-dot {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  color: var(--on-ink);
+  transition: transform var(--dur-2) var(--ease-out);
+}
+.sidebar .new-chat:hover .plus-dot {
+  transform: rotate(90deg);
+}
+.sidebar .new-chat:active .plus-dot {
+  transform: rotate(90deg) scale(0.94);
+}
+
+/* ── nav tabs ─────────────────────────────────────────────────────── */
+.nav-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+.nav-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px var(--space-2);
+  border-radius: var(--r-sm);
+  font-size: var(--t-md);
+  font-weight: 500;
+  color: var(--ink-soft);
+  text-decoration: none;
+  transition: background-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
+}
+.nav-tab .nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-tab:hover {
+  background: var(--rule-soft);
+  color: var(--ink);
+}
+.nav-tab.active {
+  background: var(--accent-2-wash);
+  color: var(--accent-2);
+  font-weight: 600;
+}
+.sidebar .hand-rule {
+  margin: var(--space-2) var(--space-1) var(--space-3);
+  --underline-color: var(--ink-ghost);
+}
+
+/* ── the pinned general chat ──────────────────────────────────────── */
+.pinned-chat {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--r-sm);
+  font-size: var(--t-md);
+  font-weight: 500;
+  color: var(--ink);
+  text-decoration: none;
+  transition: background-color var(--dur-1) var(--ease-out);
+}
+.pinned-chat .pi-lozenge {
+  width: 22px;
+  height: 22px;
+}
+.pinned-chat .title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pinned-chat:hover {
+  background: var(--rule-soft);
+}
+.pinned-chat.active {
+  background: var(--accent-2-wash);
+  box-shadow: inset 2px 0 0 var(--accent-2);
+}
+
+/* ── search ───────────────────────────────────────────────────────── */
+.chat-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: var(--space-3) var(--space-1) var(--space-2);
+  padding: 5px var(--space-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-pill);
+  background: var(--accent-2-wash);
+  color: var(--ink-faint);
+}
+.chat-search:focus-within {
+  border-color: var(--accent-2-soft);
+}
+.chat-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  font-size: var(--t-md);
+  color: var(--ink);
+}
+.chat-search input::placeholder {
+  color: var(--ink-faint);
+}
+/* Safari draws its own clear button; the row already has one shape */
+.chat-search input::-webkit-search-decoration,
+.chat-search input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+/* ── chat sections ────────────────────────────────────────────────── */
+.sidebar .chat-list {
+  margin-top: var(--space-1);
+  padding-top: 0;
+  border-top: none;
+}
+.chat-sec {
+  margin-bottom: var(--space-3);
+}
+.sidebar .chat-list-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 var(--space-2) 2px;
+  font-weight: 400;
+}
+.chat-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.chat-item {
+  position: relative;
+}
+.sidebar .chat-row {
+  padding: 5px var(--space-2);
+  text-decoration: none;
+}
+.sidebar .chat-row .timestamp {
+  transition: opacity var(--dur-1) var(--ease-out);
+}
+.row-actions {
+  position: absolute;
+  top: 50%;
+  right: var(--space-1);
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+.row-btn {
+  display: grid;
+  place-items: center;
+  padding: 3px;
+  border-radius: var(--r-sm);
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+  transition: color var(--dur-1) var(--ease-out),
+    background-color var(--dur-1) var(--ease-out);
+}
+.row-btn:hover {
+  background: var(--paper-raised);
+  color: var(--ink);
+}
+.row-btn.starred {
+  color: var(--edge-warn);
+}
+.row-btn.starred svg {
+  fill: var(--hl-lemon);
+}
+.row-btn.confirm {
+  padding: 2px var(--space-2);
+  background: var(--stock-note);
+  border: 1px solid var(--edge-danger);
+  color: var(--ink-danger);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+/* Where there's a pointer, the actions take the timestamp's place on hover, so
+   a title gets the whole row. On touch they are always there, in their own
+   reserved lane, because there is no hover to reveal them. */
+@media (hover: hover) {
+  .row-actions {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-1) var(--ease-out);
+  }
+  .chat-item:hover .row-actions,
+  .chat-item:focus-within .row-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .chat-item:hover .timestamp,
+  .chat-item:focus-within .timestamp {
+    opacity: 0;
+  }
+}
+@media (hover: none) {
+  .sidebar .chat-row {
+    padding-right: 48px;
+  }
+}
+
+.list-empty {
+  font-family: var(--hand);
+  font-size: var(--t-lg);
+  color: var(--ink-faint);
+  margin: var(--space-2) var(--space-3) var(--space-4);
+}
+
+.browse-all {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 var(--space-1) var(--space-4);
+  padding: 4px var(--space-3);
+  border: 1px dashed var(--rule);
+  border-radius: var(--r-pill);
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  transition: border-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
+}
+.browse-all:hover {
+  border-color: var(--ink-ghost);
+  color: var(--ink);
+}
+.browse-all .icon {
+  transform: rotate(90deg);
+}
+.browse-all .icon.up {
+  transform: rotate(-90deg);
+}
+
+/* ── workspaces, not built yet ────────────────────────────────────── */
+.ws {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--rule);
+}
+.ws-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 var(--space-1);
+  padding: 6px var(--space-3);
+  border: 1px dashed var(--ink-ghost);
+  border-radius: var(--r-sm);
+  color: var(--ink-ghost);
+  font-size: var(--t-md);
+}
+.ws-note {
+  margin: var(--space-1) var(--space-3) 0;
+  font-size: var(--t-xs);
+  line-height: 1.45;
+  color: var(--ink-faint);
+}
+
+/* ── sidebar footer ───────────────────────────────────────────────── */
+.sidebar-foot {
+  padding-top: var(--space-2);
+}
+.sidebar .identity-chip {
+  text-decoration: none;
+  color: inherit;
+}
+.identity-chip .who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.identity-chip .netid,
+.identity-chip .hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.colophon {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: 0 var(--space-2);
+  font-size: var(--t-xs);
+  letter-spacing: 0.02em;
+}
+.colophon a {
+  color: var(--ink-faint);
+  text-decoration: none;
+}
+.colophon a:hover {
+  color: var(--pi-deep);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.colophon .dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--ink-ghost);
+}
+
+/* ── topbar (mobile) ──────────────────────────────────────────────── */
+.topbar .pi-lozenge {
+  width: 22px;
+  height: 22px;
+}
+.topbar strong {
+  letter-spacing: 0.02em;
+}
+
+/* the scrim is a real button so it answers the keyboard, not just the mouse */
+.scrim {
+  display: none;
+  border: 0;
+}
+
+/* ── route placeholders ───────────────────────────────────────────── */
+.route-skel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.route-skel .chat-column,
+.route-skel .page-inner {
+  flex: 1;
+  width: 100%;
+}
+.skel-turn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+}
+.skel-turn .skel-line:nth-child(1) {
+  width: 76%;
+}
+.skel-turn .skel-line:nth-child(2) {
+  width: 92%;
+}
+.skel-turn .skel-line:nth-child(3) {
+  width: 61%;
+}
+.skel-turn.mine {
+  align-items: flex-end;
+}
+.skel-turn.mine .skel-line {
+  width: 42%;
+  height: 12px;
+}
+.skel-composer {
+  height: 52px;
+  max-width: 760px;
+  width: calc(100% - var(--space-5) * 2);
+  margin: 0 auto var(--space-4);
+  border-radius: 22px;
+}
+.skel-title {
+  height: 26px;
+  width: 190px;
+  margin-bottom: var(--space-5);
+}
+/* Scoped to the route skeleton: the pages' own stylesheet ships a smaller
+   .skel-block, and it loads after this one from the lazy route chunks. */
+.route-skel .skel-block {
+  height: 116px;
+  border-radius: var(--r-lg);
+  margin-bottom: var(--space-4);
+}
+
+/* ── 404 ──────────────────────────────────────────────────────────── */
+.page-miss {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  text-align: center;
+}
+.page-miss .sticky-note {
+  max-width: 30rem;
+}
+/* The lead is an h1 here; drop the heading's own margin so the body below
+   sets the gap, exactly as it did when this was a paragraph. */
+.page-miss .lead {
+  margin: 0;
+}
+.page-miss .body {
+  margin: var(--space-2) 0 0;
+  font-size: var(--t-md);
+  color: var(--ink-soft);
+}
+
+/* ── session lapse ────────────────────────────────────────────────── */
+.lapse {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+  background: rgba(34, 30, 22, 0.34);
+}
+.lapse-card {
+  max-width: 26rem;
+  text-align: center;
+  padding: var(--space-6) var(--space-5) var(--space-5);
+  border-radius: var(--r-lg);
+  background-color: var(--paper-raised);
+  background-image: var(--grain-sheet);
+  box-shadow: var(--shadow-pop);
+  animation: lapse-in var(--dur-3) var(--ease-out);
+}
+.lapse-card h2 {
+  font-size: var(--t-xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: var(--space-3) 0 var(--space-2);
+  text-wrap: balance;
+}
+.lapse-card p {
+  color: var(--ink-soft);
+  font-size: var(--t-md);
+  margin: 0 0 var(--space-4);
+}
+@keyframes lapse-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* ── sign-in front door ───────────────────────────────────────────── */
+.signin-card .signin-mark {
+  margin: 0 auto var(--space-3);
+}
+.signin-card .eyebrow {
+  margin: 0 0 var(--space-2);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.signin-card h1 {
+  font-size: var(--t-2xl);
+  line-height: 1.15;
+}
+.signin-card h1 .swipe {
+  --swipe-color: var(--hl-cyan);
+}
+/* at display size the marker wants to sit a touch lower on the baseline */
+.signin-card h1 .swipe::before {
+  top: 0.16em;
+  bottom: -0.04em;
+}
+.signin-card .lede {
+  margin: 0 0 var(--space-4);
+  text-wrap: pretty;
+}
+.signin-asks {
+  list-style: none;
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--hand);
+  font-size: var(--t-lg);
+  line-height: 1.35;
+  color: var(--pi-deep);
+  text-wrap: balance;
+}
+.signin-asks li:nth-child(even) {
+  transform: rotate(-0.5deg);
+}
+.signin-appslabel {
+  margin: 0 0 var(--space-2);
+  font-size: var(--t-xs);
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
+.signin-apps {
+  list-style: none;
+  margin: 0 0 var(--space-5);
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: center;
+}
+.signin-apps li:nth-child(2n) {
+  transform: rotate(0.7deg);
+}
+.signin-apps li:nth-child(3n) {
+  transform: rotate(-1deg);
+}
+.signin-trouble {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--edge-danger);
+  border-radius: var(--r-md);
+  background: var(--stock-note);
+  color: var(--ink-danger);
+  font-size: var(--t-md);
+}
+.signin-card .signin-btn {
+  width: 100%;
+  padding: 12px var(--space-5);
+  font-size: var(--t-nav);
+}
+.signin-card .privacy {
+  margin: var(--space-4) 0 0;
+  font-size: var(--t-md);
+  color: var(--ink-soft);
+}
+.signin-card .footnote {
+  margin-top: var(--space-2);
+  line-height: 1.5;
+}
+.signin-card .colophon {
+  justify-content: center;
+  margin-top: var(--space-4);
+}
+
+/* ── drawer ───────────────────────────────────────────────────────── */
+@media (max-width: 820px) {
+  .drawer-close {
+    display: grid;
+  }
+  .scrim {
+    display: block;
+  }
+  /* Closed drawer leaves the tab order and the a11y tree, but only after it
+     has finished sliding out. */
+  .sidebar {
+    visibility: hidden;
+    transition: transform var(--dur-3) var(--ease-out),
+      visibility 0s linear var(--dur-3);
+  }
+  .sidebar.open {
+    visibility: visible;
+    transition: transform var(--dur-3) var(--ease-out), visibility 0s;
+  }
+  .nav-tabs {
+    gap: 4px;
+  }
+  .skel-composer {
+    width: calc(100% - var(--space-4) * 2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lapse-card {
+    animation: none;
+  }
+  .sidebar .new-chat:hover .plus-dot,
+  .sidebar .new-chat:active .plus-dot {
+    transform: none;
+  }
+}

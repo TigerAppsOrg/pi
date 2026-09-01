@@ -17,4 +17,28 @@ export default defineConfig({
       ),
     },
   },
+  environments: {
+    // Client only. The worker build is left entirely to the Cloudflare plugin:
+    // splitting that bundle would break the Durable Object entrypoint.
+    client: {
+      build: {
+        target: "es2022",
+        rollupOptions: {
+          output: {
+            // React barely changes between deploys; keeping it in its own
+            // chunk means a route split (React.lazy in the pages) only ever
+            // invalidates the small chunk that actually changed.
+            manualChunks(id: string) {
+              if (
+                /node_modules[/\\](react|react-dom|scheduler)[/\\]/.test(id)
+              ) {
+                return "react";
+              }
+              return undefined;
+            },
+          },
+        },
+      },
+    },
+  },
 });

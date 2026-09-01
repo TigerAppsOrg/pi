@@ -1,0 +1,12 @@
+# The sign-in page is the only thing here a crawler can actually reach —
+# everything below needs a Princeton session and answers 401 without one.
+# Listing those paths keeps them out of crawl budget and out of search results.
+
+User-agent: *
+Allow: /$
+Disallow: /chat/
+Disallow: /planner
+Disallow: /agenda
+Disallow: /apps
+Disallow: /auth/
+Disallow: /agents/
