@@ -177,13 +177,12 @@ export function countConnected(
 
 export const DEFAULT_ENGINE_BASE = "https://junction-engine.tigerapps.org";
 
-/** Models the switcher offers. Claude models fall back to campus without a key. */
-export type PiModel = "claude-opus-5" | "claude-sonnet-5" | "campus";
+/** Models the switcher offers. */
+export type PiModel = "claude-opus-5" | "claude-sonnet-5";
 
 export const PI_MODELS: Array<{ value: PiModel; label: string }> = [
   { value: "claude-opus-5", label: "Opus 5, sharpest" },
   { value: "claude-sonnet-5", label: "Sonnet 5, quicker" },
-  { value: "campus", label: "Campus, lightest" },
 ];
 
 /** Settings the client pushes to a Pi agent instance. */
