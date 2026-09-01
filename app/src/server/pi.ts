@@ -37,8 +37,6 @@ export type PiState = {
 
 const CLAUDE_MODELS = new Set(["claude-opus-5", "claude-sonnet-5"]);
 const DEFAULT_CLAUDE_MODEL = "claude-opus-5";
-/** Free-plan-compatible Workers AI model with solid tool calling. */
-const CAMPUS_MODEL = "@cf/zai-org/glm-4.7-flash";
 
 /** The apps PI may ask a student to switch on. */
 const APP_KEYS = PI_APPS.map((a) => a.key) as [AppKey, ...AppKey[]];
@@ -153,13 +151,15 @@ export class Pi extends Think<Env, PiState> {
     const settings = this.getConfig<PiSettings>();
     const preference = settings?.model ?? DEFAULT_CLAUDE_MODEL;
     const key = this.env.ANTHROPIC_API_KEY;
-    if (preference !== "campus" && key) {
-      const model = CLAUDE_MODELS.has(preference)
-        ? preference
-        : DEFAULT_CLAUDE_MODEL;
-      return createAnthropic({ apiKey: key })(model);
+    if (!key) {
+      // No silent fallback model: fail the turn loudly so ops notices.
+      throw new Error("ANTHROPIC_API_KEY is not configured");
     }
-    return CAMPUS_MODEL;
+    // Stale configs may still carry the retired "campus" preference.
+    const model = CLAUDE_MODELS.has(preference)
+      ? preference
+      : DEFAULT_CLAUDE_MODEL;
+    return createAnthropic({ apiKey: key })(model);
   }
 
   getSystemPrompt() {

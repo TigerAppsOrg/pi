@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import {
   DEFAULT_APPS,
+  PI_MODELS,
   type AppKey,
   type PiModel,
   type PiSettings,
@@ -64,10 +65,14 @@ function getPrefs(netid: string): Prefs {
   if (!prefsCache.has(netid)) {
     try {
       const raw = localStorage.getItem(prefsKey(netid));
-      prefsCache.set(
-        netid,
-        raw ? { ...DEFAULT_PREFS, ...JSON.parse(raw) } : DEFAULT_PREFS
-      );
+      const merged: Prefs = raw
+        ? { ...DEFAULT_PREFS, ...JSON.parse(raw) }
+        : DEFAULT_PREFS;
+      // A retired model choice (e.g. the old "campus") falls back to default.
+      if (!PI_MODELS.some((m) => m.value === merged.model)) {
+        merged.model = DEFAULT_PREFS.model;
+      }
+      prefsCache.set(netid, merged);
     } catch {
       prefsCache.set(netid, DEFAULT_PREFS);
     }
