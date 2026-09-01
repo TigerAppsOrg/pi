@@ -1789,45 +1789,51 @@ p {
   cursor: default;
 }
 
-/* model switcher inside the composer */
-.model-select {
+/* ── dropdowns: one stationery recipe (composer model, planner term) ──
+   The wireframe draws these as white pills; they behave like .btn — same
+   lift on hover, same press, same warm shadows. */
+.model-select,
+.term-select {
   border: 1px solid var(--rule);
-  background-color: var(--rule-soft);
+  background-color: var(--paper-raised);
   border-radius: var(--r-pill);
-  font-size: var(--t-sm);
   font-weight: 600;
   color: var(--ink-soft);
-  padding: var(--space-1) 26px var(--space-1) var(--space-3);
-  align-self: flex-end;
-  margin-bottom: 3px;
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
+  box-shadow: var(--shadow-card);
   /* a chevron, so it reads as a control rather than a label */
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235f5b52' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5.5 9 6.5 6.5L18.5 9'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 9px center;
-  transition: border-color var(--dur-1) var(--ease-out);
+  transition: transform var(--dur-1) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out),
+    color var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out);
 }
-.model-select:hover {
-  color: var(--ink);
-  border-color: var(--ink-ghost);
-}
-
-/* planner term dropdown */
-.term-select {
-  border: 1px solid var(--rule);
-  background: var(--paper-raised);
-  border-radius: var(--r-pill);
-  font-size: var(--t-md);
-  font-weight: 600;
-  color: var(--ink);
-  padding: 5px var(--space-3);
-  cursor: pointer;
-  transition: border-color var(--dur-1) var(--ease-out);
-}
+.model-select:hover,
 .term-select:hover {
+  color: var(--ink);
   border-color: var(--ink-ghost);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sheet);
+}
+.model-select:active,
+.term-select:active {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-press);
+}
+.model-select {
+  font-size: var(--t-sm);
+  padding: var(--space-1) 26px var(--space-1) var(--space-3);
+  align-self: flex-end;
+  margin-bottom: 3px;
+}
+.term-select {
+  font-size: var(--t-md);
+  color: var(--ink);
+  padding: 5px 30px 5px var(--space-3);
 }
 
 /* ── sign-in ──────────────────────────────────────────────────────── */
