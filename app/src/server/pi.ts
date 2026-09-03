@@ -11,8 +11,10 @@ import {
   type GcalTokenStore,
 } from "./gcal";
 import {
+  COVERED_BY_JUNCTION,
   DEFAULT_ENGINE_BASE,
   PI_APPS,
+  toolOwner,
   type AppKey,
   type PiApp,
   type PiSettings,
@@ -107,6 +109,73 @@ const ELICITATION_TOOLS = {
   }),
 };
 
+/**
+ * Split an AI SDK tool key back into the app whose connection served it and
+ * the bare MCP tool name. The MCP manager builds these keys as
+ * `tool_<server id, dashes stripped>_<tool name>`, and the client's
+ * parseToolPart (client/lib/tools.ts) takes them apart the same way — the two
+ * must stay in step, because they answer the same question on either end.
+ */
+function splitToolKey(key: string): { app: AppKey | null; base: string } {
+  const m = key.match(/^tool_([a-z0-9]+)_(.+)$/);
+  if (!m) return { app: null, base: key };
+  const app = PI_APPS.find((a) => a.key.replace(/-/g, "") === m[1])?.key ?? null;
+  return { app, base: m[2] };
+}
+
+/**
+ * A student's app toggles are consent, not routing. One connection can hand
+ * over another app's data — the engine's junction scope registers
+ * TigerSnatch's seat-watch tools and TigerPath's requirement tools — so
+ * "which server answered" is the wrong question to gate on. Ask who the data
+ * belongs to (TOOL_OWNERS, and the hints under it) and drop the tool when that
+ * app is switched off, before the model can see it and reach for it.
+ *
+ * Two ways a tool can go unplaced, and they're treated differently. PI's own
+ * file tools aren't namespaced at all — nobody's app data, so they pass
+ * through. A namespaced tool whose server isn't one of ours can only have
+ * come over a connection PI opened, and there's no honest way to say whose
+ * data it carries, so it's withheld rather than waved through.
+ */
+function dropUnconsentedTools<T>(
+  tools: Record<string, T>,
+  enabled: Set<AppKey>
+): Record<string, T> {
+  const kept: Record<string, T> = {};
+  const dropped: string[] = [];
+  const unplaceable: string[] = [];
+  for (const [key, value] of Object.entries(tools)) {
+    if (!key.startsWith("tool_")) {
+      kept[key] = value;
+      continue;
+    }
+    const { app, base } = splitToolKey(key);
+    if (!app) {
+      unplaceable.push(key);
+      continue;
+    }
+    const owner = toolOwner(base, app);
+    if (owner && !enabled.has(owner)) {
+      dropped.push(key);
+      continue;
+    }
+    kept[key] = value;
+  }
+  if (dropped.length > 0) {
+    console.log(
+      `consent: withheld ${dropped.length} tool(s):`,
+      dropped.join(", ")
+    );
+  }
+  if (unplaceable.length > 0) {
+    console.warn(
+      `consent: ${unplaceable.length} tool(s) from an unknown server, withheld:`,
+      unplaceable.join(", ")
+    );
+  }
+  return kept;
+}
+
 /** "TigerJunction", "TigerJunction and TigerPath", "a, b and c". */
 function nameList(names: string[]): string {
   if (names.length <= 1) return names[0] ?? "";
@@ -172,13 +241,11 @@ export class Pi extends Think<Env, PiState> {
     // Whether these apps actually answered isn't known yet: this prompt is
     // assembled before beforeTurn opens the connections, so an app that turns
     // out to be down is corrected there (see missingAppsNote).
-    // Junction's MCP scope already covers PrincetonCourses (see setup), so
-    // don't invite the student to switch on a duplicate of what they have.
-    const offerable = PI_APPS.filter(
-      (a) =>
-        !enabled.has(a.key) &&
-        !(a.key === "princetoncourses" && enabled.has("junction"))
-    );
+    // Every switched-off app is worth asking for, including the ones junction
+    // could technically answer for: their tools are withheld until the student
+    // says yes (see dropUnconsentedTools), so the toggle is a real answer now,
+    // not a duplicate of something they already have.
+    const offerable = PI_APPS.filter((a) => !enabled.has(a.key));
     return [
       "You are PI, the TigerApps assistant for Princeton students — a quick, warm study-desk companion. Your answers should read like notes from a sharp friend: concise, concrete, no filler.",
       "",
@@ -209,13 +276,27 @@ export class Pi extends Think<Env, PiState> {
       "",
       "Ground rules:",
       "- Princeton term codes end in 2 for Fall and 4 for Spring (e.g. 1272 = Fall 2026). When unsure which term is current, call list_terms rather than guessing.",
-      "- The interface renders schedule and course tool results as visual cards automatically. After a tool call, add a short takeaway (conflicts, standouts, next step) — never re-list every row the card already shows.",
+      "- The interface renders schedule, course, seat-demand, trending and past-term tool results as visual cards automatically. After a tool call, add a short takeaway (conflicts, standouts, whether a seat is realistic, next step) — never re-list every row the card already shows.",
       "- When a tool errors or comes back empty, say plainly what didn't work and offer the closest thing you can still do. Never paste raw error text, URLs or status codes at the student.",
       "- Confirm before anything that writes: adding or dropping a course, creating or editing a schedule, subscribing to a seat alert, deleting anything. Name exactly what you're about to change, then wait for a yes.",
       "- Keep answers tight. Prefer a short paragraph or a few bullets over headers and long lists; if a comparison really needs a table, keep it to three columns.",
-      enabled.has("gcal")
-        ? "- Google Calendar is connected read-only: use its tools for the student's real events and free/busy when planning around their week. You cannot modify their calendar."
-        : "",
+      ...(enabled.has("gcal")
+        ? [
+            "- Google Calendar is connected read-only: use its tools for the student's real events and free/busy when planning around their week. You cannot modify their calendar.",
+          ]
+        : []),
+      ...(enabled.has("snatch")
+        ? [
+            "",
+            "Seat watches:",
+            "- A watch is a real change to their account, so confirm first with offer_choices naming the exact course and section — question \"Watch COS 226 L01?\", options like \"watch it\" and \"not now\" — and wait for the pick. Same before dropping one.",
+            "- A message that already names one exact course and section (\"Watch COS 226 L01.\", \"Stop watching COS 226 L01.\") IS that confirmation. Make the call; don't ask the same question back.",
+            "- When a subscribe call comes back needing a section (a reply carrying needsSection, or an older-style error whose text lists the sections), the interface is already drawing those sections as a pick list. Say one short line — which one looks most gettable, if you can tell — and end your turn. Don't retype the sections in prose, and don't call offer_choices for them: the pick is already on screen.",
+            "- Only say a watch is on when the tool actually answered subscribed: true, and only say one is off on unsubscribed: true. If the call failed, say what didn't take and leave it there.",
+            "- When their subscriptions come back with a message about no TigerSnatch account, say plainly that seat watches need a TigerSnatch account and that they can start one at tigersnatch.com. Don't try to make one for them.",
+            "- On demand and trending numbers, the count of students waiting is the story: say whether a seat looks likely and what you'd do about it, and let the card carry the per-section rows.",
+          ]
+        : []),
     ].join("\n");
   }
 
@@ -238,10 +319,16 @@ export class Pi extends Think<Env, PiState> {
 
     const appErrors: Partial<Record<AppKey, string>> = {};
     const authUrls: Partial<Record<AppKey, string>> = {};
+    // Which endpoints to open — NOT which apps the student consented to.
+    // Every COVERED_BY_JUNCTION scope is a strict subset of junction's, so
+    // opening one alongside junction registers each shared tool twice (two
+    // names for one call, and a model that picks whichever it saw last).
+    // Junction wins; consent is enforced per tool instead, in beforeTurn and
+    // callAppTool, so a covered app's toggle still means something.
     const enabled = new Set<AppKey>(settings.apps);
-    // The princetoncourses MCP scope is a strict subset of junction's, so
-    // connecting both would register every shared tool twice. Junction wins.
-    if (enabled.has("junction")) enabled.delete("princetoncourses");
+    if (enabled.has("junction")) {
+      for (const covered of COVERED_BY_JUNCTION) enabled.delete(covered);
+    }
     const base = this.engineBase();
     const expectedUrl = (app: (typeof PI_APPS)[number]) =>
       app.mcpUrl ?? `${base}${app.mcpPath}`;
@@ -258,6 +345,9 @@ export class Pi extends Think<Env, PiState> {
       errorRedirect: "/apps",
     });
 
+    // `enabled` has already lost the junction-covered apps, so a connection
+    // opened before junction was switched on is stale here and gets closed —
+    // otherwise its duplicate tools would linger for the life of the object.
     for (const [id, server] of Object.entries(this.getMcpServers().servers)) {
       const app = PI_APPS.find((a) => a.key === id);
       const stale =
@@ -415,7 +505,20 @@ export class Pi extends Think<Env, PiState> {
       // setup() files a dead app server under appErrors instead of throwing,
       // so a turn can lose every course tool and still resolve here. Read what
       // it reported rather than trusting that it came back at all.
-      missing = PI_APPS.filter((a) => appErrors[a.key]).map((a) => a.name);
+      const failed = new Set<AppKey>(
+        PI_APPS.filter((a) => appErrors[a.key]).map((a) => a.key)
+      );
+      // Only the endpoints setup() actually opened can report an error, and the
+      // junction connection is the one carrying the covered apps' tools. So
+      // when it dies it takes their data with it, silently: without this, the
+      // prompt still says "Connected TigerApps: … TigerSnatch" and the note
+      // below names TigerJunction alone, which reads as "the rest are fine".
+      if (failed.has("junction")) {
+        for (const covered of COVERED_BY_JUNCTION) {
+          if (settings.apps.includes(covered)) failed.add(covered);
+        }
+      }
+      missing = PI_APPS.filter((a) => failed.has(a.key)).map((a) => a.name);
       const note =
         missing.length > 0
           ? `PI couldn’t use ${nameList(missing)} for this answer, so anything ${missing.length > 1 ? "they hold" : "it holds"} is missing.`
@@ -440,7 +543,14 @@ export class Pi extends Think<Env, PiState> {
           "PI couldn’t reach your TigerApps, so this answer may be missing course data.",
       });
     }
-    const tools = this.mcp.getAITools();
+    // One connection can carry several apps' data, so the merged toolset is
+    // filtered by who each tool's data belongs to before the model sees it.
+    // A student who switched TigerSnatch off gets no seat-watch tools, even
+    // though the junction connection is sitting there offering them.
+    const tools = dropUnconsentedTools(
+      { ...(inherited?.tools ?? {}), ...this.mcp.getAITools() },
+      new Set<AppKey>(settings.apps)
+    );
     const inheritedStops = inherited?.stopWhen;
     const stops = Array.isArray(inheritedStops)
       ? inheritedStops
@@ -459,8 +569,9 @@ export class Pi extends Think<Env, PiState> {
           }
         : {}),
       // The elicitation tools go on last: an app server can register any
-      // tool name it likes, and these two have to survive the merge.
-      tools: { ...(inherited?.tools ?? {}), ...tools, ...ELICITATION_TOOLS },
+      // tool name it likes, and these two have to survive the merge — and
+      // the consent filter, which is about app data they never touch.
+      tools: { ...tools, ...ELICITATION_TOOLS },
       // Eliciting ends the turn — the student's answer is the next message,
       // so don't let the model talk past its own question.
       stopWhen: [
@@ -495,6 +606,14 @@ export class Pi extends Think<Env, PiState> {
   async callAppTool(app: AppKey, name: string, args: Record<string, unknown>) {
     const settings = this.getConfig<PiSettings>();
     if (!settings?.apps.includes(app)) throw new Error(`${app} is switched off`);
+    // The agenda reaches TigerSnatch's tools over the junction connection, so
+    // an enabled server is not consent for the data it carries: the seat-watch
+    // card must go quiet when TigerSnatch itself is switched off.
+    const owner = toolOwner(name, app);
+    if (owner && !settings.apps.includes(owner)) {
+      const label = PI_APPS.find((a) => a.key === owner)?.name ?? owner;
+      throw new Error(`${label} is switched off`);
+    }
     if (!this.getMcpServers().servers[app]) {
       await this.setup(settings, { connect: true });
       if (!this.getMcpServers().servers[app]) {

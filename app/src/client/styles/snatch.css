@@ -1,0 +1,641 @@
+/**
+ * TigerSnatch cards in the transcript: seat watches, course demand, what's
+ * trending, a term-by-term history, a watch confirmation, and the "which
+ * section?" pick. Imported from ToolCards, so it lands after the design
+ * system in the bundle and wins ties.
+ *
+ * One material rule: TigerSnatch is the pink highlighter (--hl-pink, with
+ * --ink-rose for its numerals). Bars are marker swipes over ruled paper, not
+ * chart furniture — nothing here introduces a colour, a radius or an easing
+ * the design system doesn't already have.
+ */
+
+/* ── shared parts ─────────────────────────────────────────────────── */
+
+/* the course code, written on a strip of pink highlighter */
+.snatch-chip {
+  display: inline-block;
+  padding: 2px var(--space-2) 3px;
+  border-radius: var(--r-sm);
+  background: var(--hl-pink);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  transform: rotate(-0.7deg);
+}
+
+/* the course name beside a chip: takes the rest of the line, never wraps it */
+.snatch-title {
+  flex: 1;
+  min-width: 8ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-md);
+  color: var(--ink-soft);
+}
+
+.snatch-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+/* a caveat under the data, in the same voice as .label-xs */
+.snatch-note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--t-sm);
+  color: var(--ink-faint);
+  text-wrap: pretty;
+}
+/* the same aside, read before the data rather than after it */
+.snatch-note.is-lede {
+  margin: 0 0 var(--space-3);
+}
+
+/* nothing to show — PI says so in its own hand rather than drawing an
+   empty table */
+.snatch-none {
+  margin: 0;
+  padding: var(--space-2) 0;
+  font-family: var(--hand);
+  font-size: var(--t-xl);
+  line-height: 1.25;
+  color: var(--ink-faint);
+}
+.snatch-none .cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--space-2);
+  font-family: var(--sans);
+  font-size: var(--t-md);
+  font-weight: 600;
+  color: var(--pi-deep);
+  text-decoration: none;
+}
+.snatch-none .cta:hover {
+  text-decoration: underline;
+}
+
+/* a seat count as a marker swipe on a ruled track */
+.fill-bar {
+  display: block;
+  height: 7px;
+  border-radius: var(--r-pill);
+  background: var(--paper-sunk);
+  box-shadow: inset 0 0 0 1px var(--rule-soft);
+  overflow: hidden;
+}
+.fill-bar .fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--hl-pink);
+  transition: width var(--dur-3) var(--ease-out);
+}
+/* full to the brim: the track's edge tightens rather than a new colour */
+.fill-bar.is-full {
+  box-shadow: inset 0 0 0 1px var(--edge-danger);
+}
+.fill-bar.is-unknown {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--paper-sunk) 0 4px,
+    var(--rule-soft) 4px 8px
+  );
+}
+
+/* ── seats you're watching ────────────────────────────────────────── */
+
+.watch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* a bookmark: pink spine down the left, the way a watched page is tabbed */
+.watch-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--hl-pink);
+  border-radius: var(--r-sm);
+  background: var(--stock-note);
+  font-size: var(--t-md);
+}
+.watch-row .code {
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.watch-row .sec {
+  padding: 1px 7px 2px;
+  border-radius: var(--r-sm);
+  background: var(--paper-sunk);
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  color: var(--ink-soft);
+}
+.watch-row .name {
+  flex: 1;
+  min-width: 10ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.watch-row .out {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--pi-deep);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.watch-row .out:hover {
+  text-decoration: underline;
+}
+
+/* ── how full a course is ─────────────────────────────────────────── */
+
+.snatch-demand .overall {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 5px var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.snatch-demand .overall .cap {
+  font-size: var(--t-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.snatch-demand .overall .figure {
+  font-family: var(--mono);
+  font-size: var(--t-md);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.snatch-demand .overall .fill-bar {
+  grid-column: 1 / -1;
+}
+
+/* the headline number, in PI's hand */
+.snatch-demand .queue {
+  margin: 0 0 var(--space-3);
+  font-family: var(--hand);
+  font-size: var(--t-2xl);
+  line-height: 1.15;
+  color: var(--ink-rose);
+}
+
+.snatch-demand .rows {
+  display: flex;
+  flex-direction: column;
+}
+/* a ledger line: the facts on top, the bar underneath */
+.snatch-demand .row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  grid-template-areas:
+    "sec when seats pill"
+    "bar bar bar subs";
+  align-items: center;
+  gap: 5px var(--space-3);
+  padding: var(--space-2) 2px;
+  border-bottom: 1px solid var(--rule-soft);
+  font-size: var(--t-md);
+}
+.snatch-demand .row:last-child {
+  border-bottom: none;
+}
+.snatch-demand .row .sec {
+  grid-area: sec;
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  font-weight: 700;
+}
+.snatch-demand .row .when {
+  grid-area: when;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-soft);
+}
+.snatch-demand .row .seats {
+  grid-area: seats;
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+}
+.snatch-demand .row .pill {
+  grid-area: pill;
+  justify-self: end;
+}
+.snatch-demand .row .fill-bar {
+  grid-area: bar;
+}
+.snatch-demand .row .subs {
+  grid-area: subs;
+  justify-self: end;
+  font-size: var(--t-xs);
+  color: var(--ink-rose);
+  white-space: nowrap;
+}
+
+/* ── what everyone is fighting over ───────────────────────────────── */
+
+.snatch-trending .term {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  margin: 0 0 var(--space-3);
+  font-size: var(--t-nav);
+  font-weight: 600;
+}
+.snatch-trending .term .status {
+  font-family: var(--hand);
+  font-size: var(--t-xl);
+  font-weight: 400;
+  color: var(--ink-rose);
+}
+.snatch-trending .list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* the swipe behind a row is the ranking: longest queue, longest stroke */
+.snatch-trending .row {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: 6px var(--space-2);
+  border-bottom: 1px solid var(--rule-soft);
+  font-size: var(--t-md);
+}
+.snatch-trending .row:last-child {
+  border-bottom: none;
+}
+.snatch-trending .row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 3px;
+  bottom: 3px;
+  width: var(--swipe, 0%);
+  border-radius: 3px 7px 6px 3px;
+  background: var(--hl-pink);
+  opacity: 0.55;
+  transform: rotate(-0.2deg);
+}
+/* the text sits on top of the swipe, at either level */
+.snatch-trending .row > *,
+.snatch-trending .row .link > * {
+  position: relative;
+}
+/* a deep-linked row keeps a box of its own, so a keyboard focus ring has
+   something to draw around, and lays its code and name out exactly as the
+   plain row does */
+.snatch-trending .row .link {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 6ch;
+  color: inherit;
+  text-decoration: none;
+}
+.snatch-trending .row .link:hover .name {
+  color: var(--pi-deep);
+  text-decoration: underline;
+}
+.snatch-trending .row .code {
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
+/* between semesters the list is per section, so the section is marked the way
+   you'd mark it on a printed course list: a stroke under the letters */
+.snatch-trending .row .sect {
+  flex-shrink: 0;
+  padding: 0 3px 1px;
+  border-radius: 2px;
+  background: linear-gradient(to top, var(--hl-pink) 0 58%, transparent 58%);
+  font-family: var(--mono);
+  font-size: var(--t-2xs);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.snatch-trending .row .name {
+  flex: 1;
+  min-width: 6ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.snatch-trending .row .n {
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--ink-rose);
+}
+.snatch-trending .row .of {
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+.snatch-trending .foot {
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--rule);
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+}
+.snatch-trending .foot .when {
+  display: block;
+  margin-top: 2px;
+}
+
+/* ── how it has gone in past terms ────────────────────────────────── */
+
+.snatch-history .verdict {
+  margin: 0 0 var(--space-3);
+}
+.snatch-history .verdict .lead {
+  display: block;
+  font-family: var(--hand);
+  font-size: var(--t-2xl);
+  line-height: 1.1;
+  color: var(--ink-rose);
+}
+.snatch-history .verdict .why {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--t-md);
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+/* printed figures, split by hairlines — a table's spine, not three tiles.
+   A grid rather than wrapping flex, because a hairline has to know whether its
+   stat leads a line: in a wrapping row `.stat + .stat` matches on DOM order,
+   and the first figure on the second line draws a rule with nothing to its
+   left. Columns are declared, so the rule can be dropped per column. */
+.snatch-history .stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.snatch-history .stat + .stat {
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--rule-soft);
+}
+.snatch-history .stat .k {
+  display: block;
+  font-size: var(--t-2xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.snatch-history .stat .v {
+  display: block;
+  margin-top: 1px;
+  font-size: var(--t-lg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.snatch-history .stat .n {
+  display: block;
+  font-size: var(--t-xs);
+  color: var(--ink-soft);
+}
+
+/* the term-by-term strip takes a tab stop of its own (see History), so it
+   scrolls by keyboard once there are more terms than fit */
+.snatch-history .strip {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: 2px;
+}
+.snatch-history .term {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 48px;
+}
+.snatch-history .term .rate {
+  font-family: var(--mono);
+  font-size: var(--t-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+}
+.snatch-history .term .bar {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 48px;
+  border-radius: var(--r-sm);
+  background: var(--paper-sunk);
+  box-shadow: inset 0 0 0 1px var(--rule-soft);
+  overflow: hidden;
+}
+.snatch-history .term .bar span {
+  width: 100%;
+  background: var(--hl-pink);
+  transition: height var(--dur-3) var(--ease-out);
+}
+.snatch-history .term.is-closed .bar {
+  box-shadow: inset 0 0 0 1px var(--edge-danger);
+}
+.snatch-history .term .name {
+  font-size: var(--t-2xs);
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+.snatch-history .term .flag {
+  font-size: var(--t-2xs);
+  font-weight: 600;
+  color: var(--ink-rose);
+}
+
+/* ── a watch, just switched on or off ─────────────────────────────── */
+
+.snatch-change {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.snatch-change .mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-pill);
+  background: var(--hl-pink);
+  color: var(--ink-rose);
+  flex-shrink: 0;
+  transform: rotate(-4deg);
+}
+.snatch-change.is-off .mark {
+  background: var(--paper-sunk);
+  color: var(--ink-faint);
+}
+.snatch-change .body {
+  flex: 1;
+  min-width: 14ch;
+}
+.snatch-change .lead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.snatch-change .lead .sec {
+  padding: 1px 7px 2px;
+  border-radius: var(--r-sm);
+  background: var(--paper-sunk);
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.snatch-change .said {
+  margin: 3px 0 0;
+  font-size: var(--t-md);
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+.snatch-change .undo {
+  flex-shrink: 0;
+}
+
+/* ── which section? ───────────────────────────────────────────────── */
+
+.snatch-pick .ask {
+  margin: 0 0 var(--space-3);
+  font-family: var(--hand);
+  font-size: var(--t-xl);
+  line-height: 1.25;
+  color: var(--ink);
+}
+.snatch-pick .list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.snatch-pick .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  background: var(--paper-raised);
+  text-align: left;
+  font-size: var(--t-md);
+  transition: background-color var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out),
+    box-shadow var(--dur-1) var(--ease-out);
+}
+.snatch-pick .row:hover:not(:disabled) {
+  border-color: var(--ink-ghost);
+  background: var(--stock-note);
+}
+.snatch-pick .row:active:not(:disabled) {
+  box-shadow: var(--shadow-press);
+}
+.snatch-pick .row:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.snatch-pick .row .sec {
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  font-weight: 700;
+}
+.snatch-pick .row .when {
+  color: var(--ink-soft);
+}
+.snatch-pick .row .seats {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+}
+.snatch-pick .settled {
+  margin: var(--space-2) 0 0;
+  font-size: var(--t-sm);
+  color: var(--ink-faint);
+}
+
+/* ── narrow desks ─────────────────────────────────────────────────── */
+
+@media (max-width: 560px) {
+  /* the seat count moves under the section rather than squeezing the time */
+  .snatch-demand .row {
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      "sec when pill"
+      "bar bar seats"
+      "subs subs subs";
+  }
+  .snatch-demand .row .seats {
+    justify-self: end;
+  }
+  .snatch-demand .row .subs {
+    justify-self: start;
+  }
+  .watch-row .out {
+    margin-left: 0;
+  }
+  /* three figures don't fit a phone, so they run two up — and whichever stat
+     starts a line loses its hairline, which is the whole point of the grid */
+  .snatch-history .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .snatch-history .stat:nth-child(odd) {
+    padding-left: 0;
+    border-left: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill-bar .fill,
+  .snatch-history .term .bar span,
+  .snatch-pick .row {
+    transition: none;
+  }
+}

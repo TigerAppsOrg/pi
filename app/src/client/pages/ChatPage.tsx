@@ -45,6 +45,7 @@ import {
   APP_REQUEST_PART,
   CHOICES_PART,
   appDisplayName,
+  ownerOf,
   parseAppRequest,
   parseChoicesAsk,
   parseToolPart,
@@ -920,8 +921,20 @@ function fmtClock(at: number): string {
   });
 }
 
+/**
+ * Most tool names read as plain English once the underscores go, so the
+ * list only names the handful that read as machinery: the seat-watch tools
+ * carry TigerSnatch's own name inside them, which the app column already
+ * said.
+ */
+const TOOL_PHRASES: Record<string, string> = {
+  get_snatch_subscriptions: "check the seats you're watching",
+  subscribe_to_snatch: "watch a section for a seat",
+  unsubscribe_from_snatch: "stop watching a section",
+};
+
 function humanTool(base: string): string {
-  return base.replace(/[_-]+/g, " ").trim();
+  return TOOL_PHRASES[base] ?? base.replace(/[_-]+/g, " ").trim();
 }
 
 /* ── one turn ────────────────────────────────────────────────────── */
@@ -1097,7 +1110,19 @@ function Turn({
         );
       }
       const tool = parseToolPart(part);
-      if (tool) return <ToolRender key={i} view={tool} />;
+      // A card may offer the student a follow-up (undo a watch, pick a
+      // section). It goes out as an ordinary message on the same path a
+      // choice does, and settles once they've spoken again.
+      if (tool) {
+        return (
+          <ToolRender
+            key={i}
+            view={tool}
+            onSend={onReply}
+            settled={answered}
+          />
+        );
+      }
       return null;
     })
     .filter((node): node is React.ReactElement => node !== null);
@@ -1143,7 +1168,12 @@ function Turn({
   );
 }
 
-/** "Worked from ● TigerJunction ● PrincetonCourses", derived from the calls. */
+/**
+ * "Worked from ● TigerJunction ● TigerSnatch", derived from the calls. The
+ * app named is the one the data belongs to, not the connection that carried
+ * it: with TigerJunction on, seat-watch tools arrive over its scope, and a
+ * student reading this is owed TigerSnatch's name.
+ */
 function WorkedFrom({ message }: { message: UIMessage }) {
   const calls = useMemo(() => {
     const out: Array<{ app: AppKey | null; base: string }> = [];
@@ -1152,7 +1182,7 @@ function WorkedFrom({ message }: { message: UIMessage }) {
         continue;
       }
       const tool = parseToolPart(part);
-      if (tool) out.push({ app: tool.app, base: tool.base });
+      if (tool) out.push({ app: ownerOf(tool), base: tool.base });
     }
     return out;
   }, [message.parts]);

@@ -161,7 +161,97 @@ export const CUSTOM_APP_SOON: SoonApp = {
   kind: "app",
 };
 
-export const DEFAULT_APPS: AppKey[] = ["junction"];
+/**
+ * The wireframe switches TigerApps' own apps on by default; a student can
+ * flip any of them off. Google Calendar stays off until its consent round-trip.
+ */
+export const DEFAULT_APPS: AppKey[] = [
+  "junction",
+  "princetoncourses",
+  "path",
+  "snatch",
+];
+
+/**
+ * What the master switch on My apps puts back when it has no record of what
+ * the student had switched on. Deliberately NOT DEFAULT_APPS: that's the
+ * starting hand for someone who has never chosen, while this fires for someone
+ * who chose to switch everything off. One switch can't stand in for four
+ * separate yeses, so it restores the one app the rest of the desk is built
+ * around and leaves the others to their own toggles.
+ */
+export const MASTER_RESTORE_APPS: AppKey[] = ["junction"];
+
+/**
+ * The engine's /junction/mcp scope registers every tool these apps' own
+ * scopes do, so when TigerJunction is on their endpoints are never opened —
+ * their tools arrive through the junction connection instead. Which app a
+ * tool *belongs* to (for consent and attribution) is TOOL_OWNERS' job.
+ */
+export const COVERED_BY_JUNCTION: AppKey[] = [
+  "princetoncourses",
+  "snatch",
+  "path",
+];
+
+/**
+ * Data provenance per engine tool, independent of which scope served the
+ * call: seat-watch data is TigerSnatch's whether it came over /snatch/mcp or
+ * /junction/mcp. Used by the server to drop tools whose owner is switched
+ * off, and by the client to say "Worked from TigerSnatch" truthfully. Tools
+ * not listed belong to the scope that served them.
+ */
+export const TOOL_OWNERS: Record<string, AppKey> = {
+  get_snatch_subscriptions: "snatch",
+  subscribe_to_snatch: "snatch",
+  unsubscribe_from_snatch: "snatch",
+  get_course_demand: "snatch",
+  get_trending_courses: "snatch",
+  get_course_historical_demand: "snatch",
+  get_requirement_tree: "path",
+  get_requirement_node: "path",
+  course_timing_distribution: "path",
+  major_schedule_overview: "path",
+  course_popularity: "path",
+  get_major_stats: "path",
+  get_user_schedule: "path",
+  update_user_schedule: "path",
+  get_course_evaluations: "princetoncourses",
+  find_top_rated_courses: "princetoncourses",
+  summarize_course_reviews: "princetoncourses",
+  get_instructor: "princetoncourses",
+  search_instructors: "princetoncourses",
+  get_instructor_courses: "princetoncourses",
+};
+
+/**
+ * A safety net under TOOL_OWNERS, for the engine tools it hasn't caught up
+ * with: a rename, a versioned alias, a new sibling. Falling back to "whoever
+ * served it" would hand every one of those to TigerJunction — which both
+ * defeats the consent gate (a student with TigerSnatch off would get seat
+ * tools anyway) and puts the wrong app's name on the card. Each fragment is
+ * either an app's own name or a phrase TOOL_OWNERS already assigns to it, so
+ * no other app on the engine names a tool this way.
+ *
+ * This can't catch a genuinely new tool under a new name; ownership is only
+ * ever as good as this file, and a new engine tool still belongs in
+ * TOOL_OWNERS above.
+ */
+const OWNER_HINTS: Array<[AppKey, RegExp]> = [
+  ["snatch", /snatch|seat_watch|course_demand|trending_course|historical_demand/],
+  ["path", /requirement_(tree|node)|major_stats|major_schedule/],
+  ["princetoncourses", /evaluation|instructor|course_reviews/],
+];
+
+/** Which app a tool's data belongs to, given the app whose scope served it. */
+export function toolOwner(base: string, servedBy: AppKey | null): AppKey | null {
+  const named = TOOL_OWNERS[base];
+  if (named) return named;
+  for (const [app, pattern] of OWNER_HINTS) {
+    if (pattern.test(base)) return app;
+  }
+  return servedBy;
+}
 
 /**
  * Apps PI can genuinely read right now. Google Calendar counts only once its
