@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import {
+  COVERED_BY_JUNCTION,
   DEFAULT_APPS,
   PI_MODELS,
   type AppKey,
@@ -34,6 +35,33 @@ export type Prefs = { apps: AppKey[]; model: PiModel };
 
 const DEFAULT_PREFS: Prefs = { apps: DEFAULT_APPS, model: "claude-opus-5" };
 
+/**
+ * Stamped on every saved blob, so a one-time migration runs once. Bump it only
+ * alongside a migration in `migrate` below.
+ */
+const PREFS_VERSION = 1;
+
+type StoredPrefs = Partial<Prefs> & { v?: number };
+
+/**
+ * Until PREFS_VERSION 1, a student with TigerJunction on was already reading
+ * PrincetonCourses ratings, TigerPath requirement trees and TigerSnatch seat
+ * watches: those tools arrived over the junction connection and their own
+ * toggles did nothing. Now each app is its own yes, so an untouched stored
+ * preference would quietly take away data the student already had — their app
+ * would simply get quieter, with nothing saying why.
+ *
+ * So grant those three exactly once, and only to a student who had
+ * TigerJunction on. It hands over nothing they weren't already receiving; it
+ * just makes the switches honest about it. Anyone can switch them back off,
+ * and the stamp means this never runs again.
+ */
+function migrate(stored: StoredPrefs, prefs: Prefs): Prefs {
+  if (stored.v === PREFS_VERSION) return prefs;
+  if (!prefs.apps.includes("junction")) return prefs;
+  return { ...prefs, apps: [...new Set([...prefs.apps, ...COVERED_BY_JUNCTION])] };
+}
+
 const prefsKey = (netid: string) => `pi:u:${netid}:prefs`;
 const chatsKey = (netid: string) => `pi:u:${netid}:chats`;
 const stashKey = (netid: string) => `pi:u:${netid}:appstash`;
@@ -65,12 +93,18 @@ function getPrefs(netid: string): Prefs {
   if (!prefsCache.has(netid)) {
     try {
       const raw = localStorage.getItem(prefsKey(netid));
-      const merged: Prefs = raw
-        ? { ...DEFAULT_PREFS, ...JSON.parse(raw) }
-        : DEFAULT_PREFS;
+      const stored: StoredPrefs = raw ? JSON.parse(raw) : {};
+      let merged: Prefs = { ...DEFAULT_PREFS, ...stored };
       // A retired model choice (e.g. the old "campus") falls back to default.
       if (!PI_MODELS.some((m) => m.value === merged.model)) {
         merged.model = DEFAULT_PREFS.model;
+      }
+      if (raw) {
+        merged = migrate(stored, merged);
+        // Written back straight away, stamp and all: a migration that reruns
+        // on the next load would switch apps back on after the student had
+        // switched them off.
+        if (stored.v !== PREFS_VERSION) writePrefs(netid, merged);
       }
       prefsCache.set(netid, merged);
     } catch {
@@ -94,9 +128,17 @@ function getChats(netid: string): ChatMeta[] {
   return chatsCache.get(netid)!;
 }
 
-export function savePrefs(netid: string, next: Prefs) {
+/** The single writer, so every saved blob carries its version stamp. */
+function writePrefs(netid: string, next: Prefs) {
   prefsCache.set(netid, next);
-  localStorage.setItem(prefsKey(netid), JSON.stringify(next));
+  localStorage.setItem(
+    prefsKey(netid),
+    JSON.stringify({ ...next, v: PREFS_VERSION })
+  );
+}
+
+export function savePrefs(netid: string, next: Prefs) {
+  writePrefs(netid, next);
   emit();
 }
 

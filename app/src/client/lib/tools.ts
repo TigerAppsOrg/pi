@@ -1,4 +1,4 @@
-import { PI_APPS, type AppKey } from "../../shared/apps";
+import { PI_APPS, toolOwner, type AppKey } from "../../shared/apps";
 
 /**
  * Helpers for turning raw tool-call message parts (including MCP tools,
@@ -389,8 +389,12 @@ export type CourseRowData = {
   status?: string;
   rating?: number | null;
   meta?: string;
+  /** Students waiting for a seat, when the payload counts them. */
+  waiting?: number;
   /** Deep link to this offering on PrincetonCourses, when derivable. */
   pcUrl?: string;
+  /** Deep link to this course on TigerSnatch, as the payload gave it. */
+  snatchUrl?: string;
 };
 
 const PC_HOME = PI_APPS.find((a) => a.key === "princetoncourses")!.home;
@@ -414,7 +418,17 @@ function pcCourseUrl(c: any): string | undefined {
   return undefined;
 }
 
-export function extractCourses(data: unknown): CourseRowData[] | null {
+/**
+ * The generic list treatment, used for every app's course payloads. `owner` is
+ * the app whose data this is (see ownerOf): a count of students waiting for a
+ * seat is a thing only TigerSnatch measures, so it's only read off a payload
+ * that belongs to TigerSnatch. Any other app's `size` means something else
+ * entirely, and printing it as "239 waiting" would be an invented number.
+ */
+export function extractCourses(
+  data: unknown,
+  owner: AppKey | null = null
+): CourseRowData[] | null {
   if (data == null || typeof data !== "object") return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const d = data as any;
@@ -424,7 +438,7 @@ export function extractCourses(data: unknown): CourseRowData[] | null {
   const rows: CourseRowData[] = [];
   for (const c of list) {
     if (!c || typeof c !== "object") continue;
-    const code = c.code ?? c.courseCode ?? c.course ?? null;
+    const code = c.code ?? c.courseCode ?? c.course ?? deptNum(c.deptnum);
     if (!code) continue;
     const rating =
       typeof c.rating === "number"
@@ -443,16 +457,586 @@ export function extractCourses(data: unknown): CourseRowData[] | null {
       if (name) bits.push(name);
     }
     if (typeof c.instructor === "string") bits.push(c.instructor);
+    // "size" is TigerSnatch's word for the queue on a course: how many
+    // students are waiting for a seat in it right now. Nobody else's payload
+    // means that by it, so nobody else's is read for it.
+    const waiting =
+      owner === "snatch" ? firstNumber([c.size, c.subscribers]) : null;
     rows.push({
       code: String(code),
       title: String(c.title ?? c.name ?? ""),
       status: c.status ? String(c.status) : undefined,
       rating,
       meta: bits.join(" · ") || undefined,
+      waiting: waiting ?? undefined,
       pcUrl: pcCourseUrl(c),
+      snatchUrl: httpUrl(c.course_page_url) ?? undefined,
     });
   }
   return rows.length > 0 ? rows : null;
+}
+
+/* ── TigerSnatch extraction (seat watches, demand, history) ──────── */
+
+/**
+ * Everything below reads the engine's TigerSnatch payloads exactly as they
+ * arrive. Each extractor returns null the moment the shape isn't the one it
+ * knows, so a card never invents a field the payload didn't carry — an empty
+ * watch list and "no TigerSnatch account yet" are different answers, and a
+ * seat count PI didn't get is simply not drawn.
+ */
+
+export const SNATCH_HOME = PI_APPS.find((a) => a.key === "snatch")!.home;
+
+/** "COS226" → "COS 226". Cross-listings keep their slash. */
+export function deptNum(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const text = raw.trim();
+  if (!text) return null;
+  return text
+    .split("/")
+    .map((part) => {
+      const m = part.trim().match(/^([A-Za-z]{2,4})\s*(\d{3}[A-Za-z]?)$/);
+      return m ? `${m[1].toUpperCase()} ${m[2].toUpperCase()}` : part.trim();
+    })
+    .join("/");
+}
+
+function str(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  return text ? text : null;
+}
+
+function num(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function httpUrl(value: unknown): string | null {
+  return typeof value === "string" && /^https?:\/\//.test(value) ? value : null;
+}
+
+/** A whole number with thousands separators: 2781 → "2,781". */
+export function count(n: number): string {
+  return n.toLocaleString();
+}
+
+function clampPct(n: number): number {
+  return Math.max(0, Math.min(100, n));
+}
+
+/** Reads a percentage out of "66%", "232/350 (66%)", or a bare number. */
+function pct(value: unknown): number | null {
+  const direct = num(value);
+  if (direct != null) return clampPct(direct);
+  if (typeof value !== "string") return null;
+  const percent = value.match(/(\d+(?:\.\d+)?)\s*%/);
+  if (percent) return clampPct(parseFloat(percent[1]));
+  const ratio = value.match(/(\d+)\s*\/\s*(\d+)/);
+  if (ratio && Number(ratio[2]) > 0) {
+    return clampPct((Number(ratio[1]) / Number(ratio[2])) * 100);
+  }
+  return null;
+}
+
+function ratioPct(taken: number | null, total: number | null): number | null {
+  if (taken == null || total == null || total <= 0) return null;
+  return clampPct((taken / total) * 100);
+}
+
+/**
+ * The engine writes a verdict and its reason on one line, joined by a dash
+ * ("Very Competitive — fills every term"). Cards set them on two lines
+ * instead, so no dash ever reaches a student.
+ */
+function splitDash(text: string): [string, string | null] {
+  const m = text.match(/^(.*?)\s*[—–]\s+(.+)$/s);
+  return m ? [m[1].trim(), m[2].trim()] : [text.trim(), null];
+}
+
+/** "Growing (+20% capacity since Fall 2024)" → value and the aside. */
+function splitParen(text: string): [string, string | null] {
+  const m = text.match(/^([^(]+?)\s*\((.+)\)\s*$/s);
+  return m ? [m[1].trim(), m[2].trim()] : [text.trim(), null];
+}
+
+/* — get_snatch_subscriptions — */
+
+export type WatchRow = {
+  code: string;
+  name: string | null;
+  section: string | null;
+  /** The course's own page on TigerSnatch, when the payload linked it. */
+  url: string | null;
+};
+
+export type WatchesView = {
+  rows: WatchRow[];
+  /** TigerSnatch puts the student back on the list after each alert. */
+  autoResubscribe: boolean;
+  /** No TigerSnatch account yet, which is not the same as watching nothing. */
+  noAccount: boolean;
+};
+
+export function extractWatches(data: unknown): WatchesView | null {
+  if (data == null || typeof data !== "object") return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = data as any;
+  if (!Array.isArray(d.subscriptions)) return null;
+
+  const rows: WatchRow[] = [];
+  for (const s of d.subscriptions) {
+    if (!s || typeof s !== "object") continue;
+    const code = deptNum(s.deptnum) ?? str(s.course) ?? str(s.code);
+    if (!code) continue;
+    rows.push({
+      code,
+      name: str(s.name) ?? str(s.title),
+      section: str(s.section),
+      url: httpUrl(s.course_page_url),
+    });
+  }
+  // Rows that all failed to parse mean this isn't the payload we think it is.
+  if (d.subscriptions.length > 0 && rows.length === 0) return null;
+
+  const message = str(d.message);
+  return {
+    rows,
+    autoResubscribe: d.autoResubscribe === true,
+    noAccount:
+      rows.length === 0 &&
+      message != null &&
+      /no tigersnatch account/i.test(message),
+  };
+}
+
+/* — get_course_demand — */
+
+export type DemandSection = {
+  section: string;
+  days: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  enrollment: number | null;
+  capacity: number | null;
+  fillPercent: number | null;
+  isOpen: boolean | null;
+  subscribers: number | null;
+};
+
+export type DemandView = {
+  code: string;
+  title: string | null;
+  /** As the engine phrased it: "232/350 (66%)". */
+  overallFill: string | null;
+  overallPercent: number | null;
+  hasReservedSeats: boolean;
+  totalSubscribers: number | null;
+  sections: DemandSection[];
+};
+
+export function extractDemand(data: unknown): DemandView | null {
+  if (data == null || typeof data !== "object") return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = data as any;
+  const code = deptNum(d.course) ?? str(d.course);
+  if (!code || !Array.isArray(d.sections)) return null;
+  // The tell against a schedule payload, which also carries `sections`:
+  // demand counts seats.
+  const isDemand =
+    typeof d.overallFill === "string" ||
+    typeof d.totalSubscribers === "number" ||
+    typeof d.hasReservedSeats === "boolean";
+  if (!isDemand) return null;
+
+  const sections: DemandSection[] = [];
+  for (const s of d.sections) {
+    if (!s || typeof s !== "object") continue;
+    const label = str(s.section);
+    if (!label) continue;
+    const enrollment = num(s.enrollment);
+    const capacity = num(s.capacity);
+    sections.push({
+      section: label,
+      days: str(s.days),
+      startTime: str(s.startTime),
+      endTime: str(s.endTime),
+      enrollment,
+      capacity,
+      fillPercent: pct(s.fillPercent) ?? ratioPct(enrollment, capacity),
+      isOpen: typeof s.isOpen === "boolean" ? s.isOpen : null,
+      subscribers: num(s.subscribers),
+    });
+  }
+
+  return {
+    code,
+    title: str(d.title),
+    overallFill: str(d.overallFill),
+    overallPercent: pct(d.overallFill),
+    hasReservedSeats: d.hasReservedSeats === true,
+    totalSubscribers: num(d.totalSubscribers),
+    sections,
+  };
+}
+
+/* — get_trending_courses — */
+
+export type TrendingRow = {
+  code: string;
+  name: string | null;
+  section: string | null;
+  /** Students waiting for a seat (add/drop). */
+  waiting: number | null;
+  enrollment: number | null;
+  capacity: number | null;
+  fillPercent: number | null;
+  url: string | null;
+};
+
+export type TrendingView = {
+  term: string | null;
+  /** Only set between semesters, with its explainer split onto a second line. */
+  statusLead: string | null;
+  statusNote: string | null;
+  /** What the rows count: a queue for a seat, or the seats already taken. */
+  mode: "waiting" | "enrolled";
+  rows: TrendingRow[];
+  /** Platform totals, already worded. Rendered as one quiet footer line. */
+  stats: string[];
+  lastUpdated: string | null;
+};
+
+export function extractTrending(data: unknown): TrendingView | null {
+  if (data == null || typeof data !== "object") return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = data as any;
+  const spiking = Array.isArray(d.trendingCourses) ? d.trendingCourses : null;
+  const filled = Array.isArray(d.topEnrolled) ? d.topEnrolled : null;
+  if (!spiking && !filled) return null;
+
+  const rows: TrendingRow[] = [];
+  for (const c of spiking ?? filled ?? []) {
+    if (!c || typeof c !== "object") continue;
+    const code = deptNum(c.deptnum) ?? str(c.course) ?? str(c.code);
+    if (!code) continue;
+    const enrollment = num(c.enrollment);
+    const capacity = num(c.capacity);
+    rows.push({
+      code,
+      name: str(c.name) ?? str(c.title),
+      section: str(c.section),
+      waiting: num(c.size) ?? num(c.subscribers),
+      enrollment,
+      capacity,
+      fillPercent: pct(c.fillPercent) ?? ratioPct(enrollment, capacity),
+      url: httpUrl(c.course_page_url),
+    });
+  }
+  if (rows.length === 0) return null;
+
+  const status = str(d.status);
+  const [statusLead, statusNote] = status ? splitDash(status) : [null, null];
+  return {
+    term: str(d.term),
+    statusLead,
+    statusNote,
+    mode: spiking ? "waiting" : "enrolled",
+    rows,
+    stats: platformStats(d.platformStats),
+    lastUpdated: str(d.lastUpdated),
+  };
+}
+
+/** Turns whichever totals the payload carries into plain phrases. */
+function platformStats(raw: unknown): string[] {
+  if (raw == null || typeof raw !== "object") return [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const p = raw as any;
+  const out: string[] = [];
+  const watches = num(p.totalSubscriptions);
+  const courses = num(p.subscribedCourses);
+  const students = num(p.subscribedUsers);
+  const sections = num(p.subscribedSections);
+  if (watches != null) {
+    out.push(
+      courses != null
+        ? `${count(watches)} seat watches across ${count(courses)} courses`
+        : `${count(watches)} seat watches`
+    );
+  } else if (courses != null) {
+    out.push(`${count(courses)} courses being watched`);
+  }
+  if (students != null) out.push(`${count(students)} students watching`);
+  if (watches == null && sections != null) {
+    out.push(`${count(sections)} sections`);
+  }
+  const everStudents = num(p.totalUsersAllTime);
+  if (everStudents != null) {
+    out.push(`${count(everStudents)} students have used TigerSnatch`);
+  }
+  const everAlerts = num(p.totalNotificationsAllTime);
+  if (everAlerts != null) out.push(`${count(everAlerts)} seat alerts sent`);
+  return out;
+}
+
+/* — get_course_historical_demand — */
+
+export type HistoryTerm = {
+  termName: string;
+  courseStatus: string | null;
+  totalEnrolled: number | null;
+  totalCapacity: number | null;
+  /** As the engine phrased it: "85%". */
+  fillRate: string | null;
+  fillPercent: number | null;
+  sections: number | null;
+  closedSections: number | null;
+  canceledSections: number | null;
+};
+
+export type HistoryView = {
+  code: string;
+  title: string | null;
+  /** "Very Competitive", with its reason on the second line. */
+  competitiveness: string | null;
+  competitivenessNote: string | null;
+  averageFillRate: string | null;
+  timesFullyClosed: string | null;
+  timesWithClosedSections: string | null;
+  /** "Growing", with "+20% capacity since Fall 2024" as the aside. */
+  capacityTrend: string | null;
+  capacityTrendNote: string | null;
+  terms: HistoryTerm[];
+};
+
+export function extractHistory(data: unknown): HistoryView | null {
+  if (data == null || typeof data !== "object") return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = data as any;
+  const code = deptNum(d.course) ?? str(d.course);
+  if (!code || !Array.isArray(d.history)) return null;
+  const verdict = str(d.competitiveness);
+  const trend = str(d.capacityTrend);
+  const average = str(d.averageFillRate);
+  const closed = str(d.timesFullyClosed);
+  if (!verdict && !trend && !average && !closed) return null;
+
+  const terms: HistoryTerm[] = [];
+  for (const t of d.history) {
+    if (!t || typeof t !== "object") continue;
+    const termName =
+      str(t.termName) ??
+      (num(t.term) != null ? termCodeToName(num(t.term)!) : null) ??
+      str(t.term);
+    if (!termName) continue;
+    const totalEnrolled = num(t.totalEnrolled);
+    const totalCapacity = num(t.totalCapacity);
+    terms.push({
+      termName,
+      courseStatus: str(t.courseStatus),
+      totalEnrolled,
+      totalCapacity,
+      fillRate: str(t.fillRate),
+      fillPercent: pct(t.fillRate) ?? ratioPct(totalEnrolled, totalCapacity),
+      sections: num(t.sections),
+      closedSections: num(t.closedSections),
+      canceledSections: num(t.canceledSections),
+    });
+  }
+
+  const [competitiveness, competitivenessNote] = verdict
+    ? splitDash(verdict)
+    : [null, null];
+  const [capacityTrend, capacityTrendNote] = trend
+    ? splitParen(trend)
+    : [null, null];
+  return {
+    code,
+    title: str(d.title),
+    competitiveness,
+    competitivenessNote,
+    averageFillRate: average,
+    timesFullyClosed: closed,
+    timesWithClosedSections: str(d.timesWithClosedSections),
+    capacityTrend,
+    capacityTrendNote,
+    terms,
+  };
+}
+
+/* — subscribe_to_snatch / unsubscribe_from_snatch — */
+
+export type SubscriptionChange = {
+  /** True after subscribing, false after unsubscribing. */
+  watching: boolean;
+  code: string;
+  title: string | null;
+  section: string | null;
+  message: string | null;
+};
+
+export function extractSubscriptionChange(
+  data: unknown
+): SubscriptionChange | null {
+  if (data == null || typeof data !== "object") return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = data as any;
+  const watching =
+    d.subscribed === true ? true : d.unsubscribed === true ? false : null;
+  if (watching === null) return null;
+  const course = str(d.course);
+  if (!course) return null;
+  // The engine hands back "COS 226 — Algorithms and Data Structures".
+  const [rawCode, title] = splitDash(course);
+  return {
+    watching,
+    code: deptNum(rawCode) ?? rawCode,
+    title,
+    section: str(d.section),
+    message: str(d.message),
+  };
+}
+
+/* — "which section?" — */
+
+export type SectionOption = {
+  section: string;
+  days: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  /** "open" or "closed", as the payload said. */
+  status: string | null;
+  enrolled: number | null;
+  capacity: number | null;
+};
+
+export type SectionChoice = {
+  code: string;
+  title: string | null;
+  options: SectionOption[];
+};
+
+/**
+ * A course with several sections and no section named comes back two ways
+ * while the engine changes over: today as a tool error whose text lists the
+ * sections, and soon as a plain `needsSection` result. Both land here so the
+ * student sees the same rows either way.
+ */
+export function extractSectionChoice(
+  data: unknown,
+  errorText: string | null
+): SectionChoice | null {
+  if (data != null && typeof data === "object") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const d = data as any;
+    if (d.needsSection === true && Array.isArray(d.sections)) {
+      const options: SectionOption[] = [];
+      for (const s of d.sections) {
+        if (!s || typeof s !== "object") continue;
+        const label = str(s.title) ?? str(s.section);
+        if (!label) continue;
+        options.push({
+          section: label,
+          days: str(s.days),
+          startTime: str(s.startTime),
+          endTime: str(s.endTime),
+          status: str(s.status)?.toLowerCase() ?? null,
+          enrolled: num(s.enrolled),
+          capacity: num(s.capacity),
+        });
+      }
+      const code = deptNum(d.course) ?? str(d.course);
+      if (code && options.length > 0) {
+        return { code, title: str(d.title), options };
+      }
+    }
+  }
+  return parseSectionList(errorText);
+}
+
+/**
+ * The legacy error text: "COS 226 has 4 sections. Please specify which one:".
+ *
+ * The sentence arrives wrapped — the AI SDK hands a thrown JSON-RPC error over
+ * as "MCP error -32602: COS 226 has 4 sections. …" — so the course code is
+ * matched by its own shape rather than by "everything before `has`", which
+ * would swallow the transport's prefix and print it back at the student. Text
+ * that doesn't hold a course code isn't this answer at all: return null and let
+ * it fall through to the ordinary error chip.
+ */
+function parseSectionList(text: string | null): SectionChoice | null {
+  if (!text) return null;
+  const head = text.match(
+    /([A-Za-z]{2,4}\s*\d{3}[A-Za-z]?)\s+has\s+\d+\s+sections?\.\s*Please specify which one:?/i
+  );
+  if (!head || head.index == null) return null;
+  const code = deptNum(head[1]);
+  if (!code) return null;
+
+  const options: SectionOption[] = [];
+  const rest = text.slice(head.index + head[0].length);
+  for (const line of rest.split("\n")) {
+    const row = line.trim().replace(/^[-•*]\s*/, "");
+    if (!row) continue;
+    const m = row.match(/^([A-Za-z]{0,2}\d{2,3}[A-Za-z]?)\s*(?:\((.*)\))?$/);
+    if (!m) continue;
+    options.push({ section: m[1], ...readSectionDetail(m[2] ?? null) });
+  }
+  return options.length > 0 ? { code, title: null, options } : null;
+}
+
+/** "TTh 1:20 PM–2:40 PM, open, 116/180 enrolled" → the fields it actually holds. */
+function readSectionDetail(inner: string | null): Omit<SectionOption, "section"> {
+  const detail: Omit<SectionOption, "section"> = {
+    days: null,
+    startTime: null,
+    endTime: null,
+    status: null,
+    enrolled: null,
+    capacity: null,
+  };
+  if (!inner) return detail;
+  for (const raw of inner.split(",")) {
+    const part = raw.trim();
+    if (!part) continue;
+    if (/^(open|closed|canceled|cancelled)$/i.test(part)) {
+      detail.status = part.toLowerCase();
+      continue;
+    }
+    const seats = part.match(/^(\d+)\s*\/\s*(\d+)\b/);
+    if (seats) {
+      detail.enrolled = Number(seats[1]);
+      detail.capacity = Number(seats[2]);
+      continue;
+    }
+    const when = part.match(
+      /^([A-Za-z]+)\s+(\d{1,2}:\d{2}\s*[AP]M)\s*[–—-]\s*(\d{1,2}:\d{2}\s*[AP]M)$/i
+    );
+    if (when) {
+      detail.days = when[1];
+      detail.startTime = when[2];
+      detail.endTime = when[3];
+      continue;
+    }
+    if (detail.days == null && /^(M|T|W|Th|F|Su|Sa)+$/.test(part)) {
+      detail.days = part;
+    }
+  }
+  return detail;
+}
+
+/** "TTh" + "1:20 PM" + "2:40 PM" → "TTh 1:20 PM–2:40 PM". */
+export function meetingLabel(part: {
+  days: string | null;
+  startTime: string | null;
+  endTime: string | null;
+}): string | null {
+  const time =
+    part.startTime && part.endTime
+      ? `${part.startTime}–${part.endTime}`
+      : part.startTime;
+  return [part.days, time].filter(Boolean).join(" ") || null;
 }
 
 /* ── evaluation extraction (PrincetonCourses evidence card) ──────── */
@@ -603,6 +1187,30 @@ export const APP_INK: Record<AppKey, string> = {
  */
 export function appDisplayName(app: AppKey | null): string {
   return PI_APPS.find((a) => a.key === app)?.name ?? "PI's desk";
+}
+
+/**
+ * Which app a tool call should be credited to. Not the same as the app whose
+ * scope served it: with TigerJunction on, seat-watch tools arrive over the
+ * junction connection but the data is still TigerSnatch's, and every surface
+ * that names a source has to say so.
+ */
+export function ownerOf(view: { base: string; app: AppKey | null }): AppKey | null {
+  return toolOwner(view.base, view.app);
+}
+
+/** The owning app's name, ready to print. */
+export function ownerName(view: { base: string; app: AppKey | null }): string {
+  return appDisplayName(ownerOf(view));
+}
+
+/** The owning app's highlighter, for dots and card spines. */
+export function ownerInk(
+  view: { base: string; app: AppKey | null },
+  fallback = "var(--rule)"
+): string {
+  const owner = ownerOf(view);
+  return owner ? APP_INK[owner] : fallback;
 }
 
 /* ── elicitation parts ───────────────────────────────────────────── */

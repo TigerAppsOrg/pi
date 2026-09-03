@@ -310,9 +310,6 @@
   font-weight: 700;
   letter-spacing: -0.01em;
 }
-.module-q-2 {
-  margin-top: var(--space-5);
-}
 .back-arrow {
   transform: rotate(180deg);
 }
@@ -444,12 +441,6 @@
   line-height: 1.2;
 }
 
-/* where a module's data actually comes from — read before the data, so it
-   sits above the first question rather than under the last row */
-.module-source {
-  margin: 0 0 var(--space-3);
-}
-
 .module-empty {
   font-family: var(--hand);
   font-size: var(--t-xl);
@@ -464,6 +455,168 @@
   font-size: var(--t-md);
   font-weight: 600;
   color: var(--pi-deep);
+}
+
+/* ── daily summary · the TigerSnatch module ───────────────────────────
+ *
+ * Everything here is scoped to .agenda-snatch, so the seat-watch rows on
+ * this page can't reach the TigerSnatch cards in chat, or the other way. */
+
+/* a switched-off app is a quiet line inside its own module, not a notice
+   over the whole page: the rest of the day still has data behind it */
+.agenda-snatch .off-line {
+  margin: 0;
+  padding: var(--space-2) 0;
+  font-size: var(--t-md);
+  color: var(--ink-soft);
+}
+.agenda-snatch .off-line .cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: var(--space-2);
+  font-weight: 600;
+  color: var(--pi-deep);
+}
+
+/* the trending head, with the term the engine answered for beside it */
+.agenda-snatch .list-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-5);
+}
+
+.agenda-snatch .list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+}
+.agenda-snatch .row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-3) 2px;
+  border-bottom: 1px solid var(--rule-soft);
+  font-size: var(--t-nav);
+  color: inherit;
+  text-decoration: none;
+}
+.agenda-snatch .list li:last-child .row {
+  border-bottom: none;
+}
+
+/* a torn pink tab in the margin, one per seat being watched */
+.agenda-snatch .row .tab {
+  align-self: center;
+  width: 10px;
+  height: 13px;
+  flex-shrink: 0;
+  border-radius: 2px 5px 3px 4px;
+  background: var(--hl-pink);
+  transform: rotate(-4deg);
+}
+/* trending is a ranking, so it's numbered by hand rather than swatched */
+.agenda-snatch .row .rank {
+  min-width: 13px;
+  flex-shrink: 0;
+  font-family: var(--hand);
+  font-size: var(--t-xl);
+  line-height: 1;
+  text-align: right;
+  color: var(--ink-faint);
+}
+.agenda-snatch .row .code {
+  min-width: 66px;
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.agenda-snatch .row .what {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* the section, marked the way you'd mark it on a printed course list:
+   a short highlighter stroke under the letters, not another pill */
+.agenda-snatch .row .sect {
+  flex-shrink: 0;
+  padding: 0 3px 1px;
+  border-radius: 2px;
+  background: linear-gradient(to top, var(--hl-pink) 0 58%, transparent 58%);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: var(--t-2xs);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.agenda-snatch .row .count {
+  flex-shrink: 0;
+  color: var(--ink-faint);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.agenda-snatch .row .go {
+  align-self: center;
+  color: var(--ink-ghost);
+  transition: color var(--dur-1) var(--ease-out);
+}
+.agenda-snatch a.row:hover .what {
+  color: var(--pi-deep);
+  text-decoration: underline;
+}
+.agenda-snatch a.row:hover .go {
+  color: var(--pi-deep);
+}
+
+/* a pencilled note in the margin: the setting, the between-terms status */
+.agenda-snatch .note,
+.agenda-snatch .status {
+  margin: var(--space-3) 0 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--hl-pink);
+}
+.agenda-snatch .status {
+  margin: var(--space-2) 0 var(--space-1);
+  font-size: var(--t-md);
+  color: var(--ink-soft);
+}
+
+/* campus totals and the engine's own timestamp, under a rule */
+.agenda-snatch .foot {
+  margin: var(--space-4) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--rule-soft);
+}
+
+/* On a phone a trending row's furniture — rank, code, section, "239 waiting",
+   the arrow — eats nearly the whole line, leaving the course title about six
+   characters before its ellipsis. So the title drops to a line of its own,
+   indented under the code the way a continued entry is. Only the ranked list
+   does this: a watch row carries no count and still has room. */
+@media (max-width: 430px) {
+  .agenda-snatch ol.list .row {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+  .agenda-snatch ol.list .row .what {
+    order: 1;
+    flex: 1 0 100%;
+    padding-left: calc(13px + var(--space-3));
+    color: var(--ink-soft);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agenda-snatch .row .go {
+    transition: none;
+  }
 }
 
 /* teaser modules: a different material, so nothing reads as shipped */

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   COMING_SOON,
   CUSTOM_APP_SOON,
-  DEFAULT_APPS,
+  MASTER_RESTORE_APPS,
   PI_APPS,
   countConnected,
   type AppKey,
@@ -100,12 +100,13 @@ export function AppsPage({
       return;
     }
     // Flipping the switch back on restores what the student had, never more
-    // than that: with nothing stashed it falls back to the starting app, so
-    // the switch can't quietly hand PI apps that read personal data.
+    // than that: with nothing stashed it falls back to TigerJunction alone
+    // (MASTER_RESTORE_APPS, not the default hand), so one switch can't stand
+    // in for four separate yeses and hand PI apps that read personal data.
     const stashed = readAppStash(identity.netid).filter((k) =>
       ENGINE_APPS.some((e) => e.key === k)
     );
-    const restore = stashed.length > 0 ? stashed : DEFAULT_APPS;
+    const restore = stashed.length > 0 ? stashed : MASTER_RESTORE_APPS;
     const apps = [...new Set([...settings.apps, ...restore])];
     apply({ ...settings, apps }, "all");
   }
@@ -162,9 +163,9 @@ export function AppsPage({
               My <span className="ink-word swipe">Apps</span>
             </h1>
             <p className="page-sub">
-              Nothing is switched on until you switch it on here. TigerJunction
-              carries course ratings and seat watches too, so PI reads those
-              through it.
+              Nothing is switched on until you switch it on here. Each app is a
+              separate yes, even the ones TigerJunction could technically
+              answer for.
             </p>
           </div>
 
