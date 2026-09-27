@@ -60,7 +60,7 @@ test("validated CAS NetID owns the session even when the email is an alias", asy
     assert.equal(url.searchParams.get("service"), flow.service);
     assert.equal(url.searchParams.get("ticket"), "ST-test-ticket");
     assert.equal(url.searchParams.get("format"), "JSON");
-    assert.equal(init.redirect, "error");
+    assert.equal(init.redirect, "manual");
     assert.ok(init.signal instanceof AbortSignal);
     return success("JD1234", { displayname: ["Jane Doe"], mail: ["jane.doe@princeton.edu"] });
   });
@@ -143,12 +143,13 @@ for (const [label, body] of [
   });
 }
 
-for (const scenario of ["network error", "timeout", "HTTP error", "non-JSON body"]) {
+for (const scenario of ["network error", "timeout", "HTTP error", "redirect", "non-JSON body"]) {
   test(`handles CAS ${scenario} without exposing the ticket`, async () => {
     const flow = await start();
     mock.method(globalThis, "fetch", async () => {
       if (scenario === "network error") throw new Error("ST-test-ticket connection failure");
       if (scenario === "timeout") throw new DOMException("timed out", "TimeoutError");
+      if (scenario === "redirect") return Response.redirect("https://example.com/untrusted", 302);
       return new Response("<html>upstream error</html>", { status: scenario === "HTTP error" ? 503 : 200 });
     });
     const res = await handleAuth(new Request(flow.callback, { headers: { cookie: flow.cookie } }), env);
