@@ -15,7 +15,7 @@ export type AuthState =
   /** Signed in when the tab opened; the session has since lapsed. */
   | { status: "expired"; identity: Identity };
 
-/** Where signIn() parks the page the student was on, across the Entra hop. */
+/** Where signIn() parks the page the student was on, across the CAS hop. */
 const RETURN_KEY = "pi:return-to";
 
 /**
@@ -108,7 +108,7 @@ export function useIdentity(): { auth: AuthState; revalidate: () => void } {
 }
 
 /**
- * Hands off to the Worker's Entra flow, remembering the page the student asked
+ * Hands off to the Worker's CAS flow, remembering the page the student asked
  * for. The callback always lands on "/", so the shell replays this on arrival.
  */
 export function signIn(returnTo = location.pathname + location.search) {

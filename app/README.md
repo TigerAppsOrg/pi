@@ -28,15 +28,23 @@ browser (React + useAgentChat over WebSocket)
 - **Models**: Claude Opus 5 by default, with Sonnet 5 and a Workers AI
   fallback ("Campus") in the switcher. Claude models require the
   `ANTHROPIC_API_KEY` secret; without it every choice falls back to Campus.
-- **Identity**: Princeton sign-in via Microsoft Entra ID (`src/server/auth.ts`
-  — OIDC auth code + PKCE, confidential client, signed HttpOnly session
-  cookie). netid is derived from the account email's local part; there is no
-  way to choose one. Every agent Durable Object is named `u-<netid>-…` and
+- **Identity**: Princeton CAS sign-in (`src/server/auth.ts`, using
+  `https://authenticate.princeton.edu/cas`). The Worker validates service
+  tickets through `/p3/serviceValidate` over HTTPS and takes the NetID from
+  CAS's authenticated `user`, never from an email alias or browser input.
+  Display name and email use CAS attributes when released, falling back to
+  NetID and `<netid>@princeton.edu`. Every agent Durable Object is named `u-<netid>-…` and
   the Worker rejects any request whose session doesn't own that prefix, so
-  chats (messages *and* workspace files) are strictly per user. Requires the
-  `ENTRA_TENANT_ID` / `ENTRA_CLIENT_ID` vars plus `ENTRA_CLIENT_SECRET` and
-  `SESSION_SECRET` secrets, and an app-registration redirect URI of
-  `<origin>/auth/callback` for every origin the app is served from.
+  chats (messages *and* workspace files) are strictly per user. Requires only
+  `SESSION_SECRET`, which signs the seven-day HttpOnly session cookie and a
+  ten-minute pending-login cookie. A random state is included in the CAS
+  service URL and checked against that cookie before ticket validation.
+  The service URL is `<origin>/auth/callback?state=<random-value>`; CAS must
+  allow that callback path and its query parameters for each deployed/dev
+  origin. Logout ends the PI session only, leaving Princeton SSO active.
+  Sessions issued before the CAS migration require a fresh sign-in. Existing
+  chats remain under their NetID; any historical email-alias namespaces are
+  not automatically reassigned.
 - **Planner**: mirrors TigerJunction's ReCal calendar — its default color
   palette, solid blocks with an ink left border for locked-in sections, and
   striped translucent blocks for section options not picked yet. The engine
@@ -67,6 +75,11 @@ npm run dev
 `npm run typecheck` needs `worker-configuration.d.ts` — generate it with
 `npx wrangler types` (CI does this automatically).
 
+`npm test` runs the auth flow tests with Node 22.6 or newer, including ticket
+validation, browser state, expired/tampered cookies, and session migration.
+Local CAS sign-in requires a callback origin permitted by Princeton CAS;
+use an approved HTTPS development origin if localhost is not permitted.
+
 The Workers AI "Campus" model runs remotely even in dev, so wrangler needs
 Cloudflare credentials (`wrangler login`, or `CLOUDFLARE_API_TOKEN` +
 `CLOUDFLARE_ACCOUNT_ID`). The Claude path only needs `ANTHROPIC_API_KEY` in
@@ -81,9 +94,12 @@ Pushes to `main` deploy automatically via GitHub Actions
 ```bash
 npm run deploy
 npx wrangler secret put ANTHROPIC_API_KEY    # enables the Claude models
-npx wrangler secret put ENTRA_CLIENT_SECRET  # Entra app registration secret
 npx wrangler secret put SESSION_SECRET       # any long random string
 ```
+
+CAS needs no client ID, tenant ID, or client secret. The old Entra and OIT
+directory credentials are no longer read and can be removed from the Worker
+after deployment. Keep the existing `SESSION_SECRET` configured.
 
 Config knobs (in `wrangler.jsonc`): `ENGINE_MCP_BASE` (engine base URL) and
 the optional `ENGINE_MCP_TOKEN` secret if the engine ever requires a bearer
