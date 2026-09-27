@@ -8,7 +8,8 @@
     "dev": "vite dev",
     "build": "vite build",
     "deploy": "vite build && wrangler deploy -c dist/pi/wrangler.json",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.0",

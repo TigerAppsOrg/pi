@@ -1,13 +1,11 @@
 /**
- * Princeton sign-in via Microsoft Entra ID (OIDC authorization code + PKCE,
- * confidential client). The Worker owns the whole flow; the browser only ever
- * sees an HttpOnly signed session cookie.
- *
- * netid is derived from the account email's local part (jdoe@princeton.edu →
- * jdoe) — there is deliberately no way to choose one.
+ * Princeton CAS sign-in. Only a ticket validated by Princeton can supply the
+ * NetID; the browser receives an HttpOnly signed session cookie.
  */
+import { z } from "zod";
 
 export type Session = {
+  provider: "cas";
   netid: string;
   name: string;
   email: string;
@@ -15,13 +13,12 @@ export type Session = {
   exp: number;
 };
 
+const CAS_BASE = "https://authenticate.princeton.edu/cas";
 const SESSION_COOKIE = "pi_session";
-const OAUTH_COOKIE = "pi_oauth";
+const CAS_COOKIE = "pi_cas";
 const SESSION_TTL_S = 7 * 24 * 60 * 60;
-const ALLOWED_DOMAIN = "princeton.edu";
-
-/* ── small codecs ─────────────────────────────────────────────────── */
-
+const LOGIN_TTL_S = 600;
+const NETID = /^[a-z][a-z0-9]{0,63}$/;
 const enc = new TextEncoder();
 
 function b64url(bytes: ArrayBuffer | Uint8Array): string {
@@ -31,27 +28,20 @@ function b64url(bytes: ArrayBuffer | Uint8Array): string {
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function unb64url(s: string): Uint8Array | null {
+function unb64url(s: string): Uint8Array<ArrayBuffer> | null {
   try {
-    const pad = s.replace(/-/g, "+").replace(/_/g, "/");
-    const bin = atob(pad);
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
+    const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/"));
+    return Uint8Array.from(bin, (c) => c.charCodeAt(0));
   } catch {
     return null;
   }
 }
 
-async function hmac(secret: string, data: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
+async function hmacKey(secret: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    "raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" },
+    false, ["sign", "verify"]
   );
-  return b64url(await crypto.subtle.sign("HMAC", key, enc.encode(data)));
 }
 
 async function signToken(
@@ -59,26 +49,27 @@ async function signToken(
   secret: string
 ): Promise<string> {
   const body = b64url(enc.encode(JSON.stringify(payload)));
-  return `${body}.${await hmac(secret, body)}`;
+  const sig = await crypto.subtle.sign("HMAC", await hmacKey(secret), enc.encode(body));
+  return `${body}.${b64url(sig)}`;
 }
 
-async function verifyToken<T>(
+async function verifyToken(
   token: string | undefined,
   secret: string
-): Promise<T | null> {
+): Promise<unknown> {
   if (!token) return null;
-  const [body, sig] = token.split(".");
-  if (!body || !sig) return null;
-  const expected = await hmac(secret, body);
-  if (sig.length !== expected.length) return null;
-  // constant-time-ish compare
-  let diff = 0;
-  for (let i = 0; i < sig.length; i++) diff |= sig.charCodeAt(i) ^ expected.charCodeAt(i);
-  if (diff !== 0) return null;
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [body, sig] = parts;
+  const signature = unb64url(sig);
   const raw = unb64url(body);
-  if (!raw) return null;
+  if (!signature || !raw) return null;
+  const valid = await crypto.subtle.verify(
+    "HMAC", await hmacKey(secret), signature, enc.encode(body)
+  );
+  if (!valid) return null;
   try {
-    return JSON.parse(new TextDecoder().decode(raw)) as T;
+    return JSON.parse(new TextDecoder().decode(raw));
   } catch {
     return null;
   }
@@ -97,36 +88,53 @@ function cookie(name: string, value: string, maxAge: number): string {
   return `${name}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 }
 
-/* ── session ──────────────────────────────────────────────────────── */
+function response(body: BodyInit | null, init: ResponseInit = {}): Response {
+  const headers = new Headers(init.headers);
+  headers.set("cache-control", "no-store");
+  headers.set("referrer-policy", "no-referrer");
+  return new Response(body, { ...init, headers });
+}
+
+const sessionSchema = z.object({
+  provider: z.literal("cas"),
+  netid: z.string().regex(NETID),
+  name: z.string(),
+  email: z.string(),
+  exp: z.number().finite(),
+});
 
 export async function getSession(
   request: Request,
   env: Env
 ): Promise<Session | null> {
   if (!env.SESSION_SECRET) return null;
-  const s = await verifyToken<Session>(
-    readCookie(request, SESSION_COOKIE),
-    env.SESSION_SECRET
-  );
-  if (!s || typeof s.netid !== "string" || !s.netid) return null;
-  if (typeof s.exp !== "number" || s.exp < Date.now() / 1000) return null;
-  return s;
+  const parsed = sessionSchema.safeParse(await verifyToken(
+    readCookie(request, SESSION_COOKIE), env.SESSION_SECRET
+  ));
+  if (!parsed.success || parsed.data.exp <= Date.now() / 1000) return null;
+  return parsed.data;
 }
 
-/* ── routes ───────────────────────────────────────────────────────── */
+const pendingSchema = z.object({
+  state: z.string().min(1),
+  service: z.string().url(),
+  exp: z.number().finite(),
+});
 
-function authority(env: Env): string {
-  return `https://login.microsoftonline.com/${env.ENTRA_TENANT_ID}`;
-}
+const casResponseSchema = z.object({
+  serviceResponse: z.object({
+    authenticationFailure: z.unknown().optional(),
+    authenticationSuccess: z.object({
+      user: z.string().transform((user) => user.toLowerCase()).pipe(z.string().regex(NETID)),
+      attributes: z.record(z.string(), z.unknown()).optional(),
+    }).optional(),
+  }),
+});
 
-function misconfigured(env: Env): Response | null {
-  if (env.ENTRA_TENANT_ID && env.ENTRA_CLIENT_ID && env.ENTRA_CLIENT_SECRET && env.SESSION_SECRET) {
-    return null;
-  }
-  return new Response(
-    "Sign-in isn't configured: set ENTRA_TENANT_ID, ENTRA_CLIENT_ID, ENTRA_CLIENT_SECRET, and SESSION_SECRET.",
-    { status: 503 }
-  );
+function attribute(attributes: Record<string, unknown>, key: string): string | undefined {
+  const value = attributes[key];
+  const first = Array.isArray(value) ? value[0] : value;
+  return typeof first === "string" && first.trim() ? first.trim() : undefined;
 }
 
 /** Handles /auth/*; returns null for other paths. */
@@ -135,146 +143,119 @@ export async function handleAuth(
   env: Env
 ): Promise<Response | null> {
   const url = new URL(request.url);
-  const redirectUri = `${url.origin}/auth/callback`;
 
   if (url.pathname === "/auth/me") {
     const session = await getSession(request, env);
-    if (!session) return Response.json({ signedIn: false }, { status: 401 });
-    return Response.json({
-      signedIn: true,
-      netid: session.netid,
-      name: session.name,
-      email: session.email,
+    return response(JSON.stringify(session ? {
+      signedIn: true, netid: session.netid, name: session.name, email: session.email,
+    } : { signedIn: false }), {
+      status: session ? 200 : 401,
+      headers: { "content-type": "application/json" },
     });
   }
 
+  if (url.pathname === "/auth/login" || url.pathname === "/auth/callback") {
+    if (!env.SESSION_SECRET) {
+      return response("Sign-in isn't configured: set SESSION_SECRET.", { status: 503 });
+    }
+  }
+
   if (url.pathname === "/auth/login") {
-    const bad = misconfigured(env);
-    if (bad) return bad;
-    const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
-    const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
-    const challenge = b64url(
-      await crypto.subtle.digest("SHA-256", enc.encode(verifier))
-    );
-    const authorize = new URL(`${authority(env)}/oauth2/v2.0/authorize`);
-    authorize.search = new URLSearchParams({
-      client_id: env.ENTRA_CLIENT_ID,
-      response_type: "code",
-      redirect_uri: redirectUri,
-      response_mode: "query",
-      scope: "openid profile email",
-      state,
-      code_challenge: challenge,
-      code_challenge_method: "S256",
-    }).toString();
-    const pending = await signToken(
-      { state, verifier, exp: Date.now() / 1000 + 600 },
-      env.SESSION_SECRET
-    );
-    return new Response(null, {
+    const state = b64url(crypto.getRandomValues(new Uint8Array(32)));
+    const service = new URL("/auth/callback", url.origin);
+    // CAS binds each ticket to this exact service, including our browser state.
+    service.searchParams.set("state", state);
+    const authorize = new URL(`${CAS_BASE}/login`);
+    authorize.searchParams.set("service", service.toString());
+    const pending = await signToken({
+      state, service: service.toString(), exp: Date.now() / 1000 + LOGIN_TTL_S,
+    }, env.SESSION_SECRET);
+    return response(null, {
       status: 302,
       headers: {
         location: authorize.toString(),
-        "set-cookie": cookie(OAUTH_COOKIE, pending, 600),
+        "set-cookie": cookie(CAS_COOKIE, pending, LOGIN_TTL_S),
       },
     });
   }
 
   if (url.pathname === "/auth/callback") {
-    const bad = misconfigured(env);
-    if (bad) return bad;
-    const fail = (why: string) =>
-      new Response(`Sign-in failed: ${why}`, { status: 400 });
-
-    const code = url.searchParams.get("code");
+    const fail = (why: string, status = 400) => response(
+      `Sign-in failed: ${why}. Please start again at /auth/login.`, {
+        status, headers: { "set-cookie": cookie(CAS_COOKIE, "", 0) },
+      }
+    );
+    const ticket = url.searchParams.get("ticket");
     const state = url.searchParams.get("state");
-    if (!code || !state) {
-      return fail(url.searchParams.get("error_description") ?? "missing code");
+    if (!ticket || !ticket.startsWith("ST-") || !state) {
+      return fail("missing or invalid ticket/state");
     }
-    const pending = await verifyToken<{
-      state: string;
-      verifier: string;
-      exp: number;
-    }>(readCookie(request, OAUTH_COOKIE), env.SESSION_SECRET);
-    if (!pending || pending.exp < Date.now() / 1000) {
-      return fail("your sign-in attempt expired — please try again");
+    const parsed = pendingSchema.safeParse(await verifyToken(
+      readCookie(request, CAS_COOKIE), env.SESSION_SECRET
+    ));
+    if (!parsed.success || parsed.data.exp <= Date.now() / 1000) {
+      return fail("your sign-in attempt expired");
     }
-    if (pending.state !== state) return fail("state mismatch");
+    const pending = parsed.data;
+    const service = new URL("/auth/callback", url.origin);
+    service.searchParams.set("state", state);
+    if (pending.state !== state || pending.service !== service.toString()) {
+      return fail("sign-in state mismatch");
+    }
 
-    const tokenRes = await fetch(`${authority(env)}/oauth2/v2.0/token`, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: env.ENTRA_CLIENT_ID,
-        client_secret: env.ENTRA_CLIENT_SECRET,
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: redirectUri,
-        code_verifier: pending.verifier,
-      }),
-    });
-    if (!tokenRes.ok) {
-      const detail = await tokenRes.text();
-      console.warn("token exchange failed", tokenRes.status, detail.slice(0, 300));
-      return fail("could not complete sign-in with Microsoft");
-    }
-    const tokens = (await tokenRes.json()) as { id_token?: string };
-    if (!tokens.id_token) return fail("no identity returned");
-
-    // The id_token comes straight from Microsoft's token endpoint over TLS
-    // (back channel), so the transport authenticates it; we still check the
-    // claims that matter.
-    const claimsRaw = unb64url(tokens.id_token.split(".")[1] ?? "");
-    if (!claimsRaw) return fail("malformed identity token");
-    let claims: Record<string, unknown>;
+    const validate = new URL(`${CAS_BASE}/p3/serviceValidate`);
+    validate.search = new URLSearchParams({
+      service: pending.service, ticket, format: "JSON",
+    }).toString();
+    let data: unknown;
     try {
-      claims = JSON.parse(new TextDecoder().decode(claimsRaw));
+      const res = await fetch(validate, {
+        headers: { accept: "application/json" },
+        redirect: "error",
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) return fail("Princeton CAS is unavailable", 502);
+      data = await res.json();
     } catch {
-      return fail("malformed identity token");
+      return fail("could not validate your ticket with Princeton CAS", 502);
     }
-    if (claims.aud !== env.ENTRA_CLIENT_ID) return fail("wrong audience");
-    if (claims.tid !== env.ENTRA_TENANT_ID) return fail("wrong tenant");
-    if (typeof claims.exp !== "number" || claims.exp < Date.now() / 1000) {
-      return fail("expired identity token");
+    const validated = casResponseSchema.safeParse(data);
+    if (!validated.success) return fail("invalid identity returned by Princeton CAS");
+    const cas = validated.data.serviceResponse;
+    if ("authenticationFailure" in cas || !cas.authenticationSuccess) {
+      return fail("Princeton CAS rejected your ticket");
     }
-
-    const email = String(
-      claims.email ?? claims.preferred_username ?? claims.upn ?? ""
-    ).toLowerCase();
-    const match = email.match(/^([a-z0-9._%+-]+)@([a-z0-9.-]+)$/);
-    if (!match || match[2] !== ALLOWED_DOMAIN) {
-      return fail(
-        `a ${ALLOWED_DOMAIN} account is required (signed in as ${email || "unknown"})`
-      );
-    }
-    // Princeton often signs people in with an email ALIAS (jane.doe@… for
-    // netid jd1234), so resolve the real netid through OIT's directory.
-    const netid = await resolveNetid(email, match[1], env);
-
+    const { user: netid, attributes = {} } = cas.authenticationSuccess;
     const session: Session = {
+      provider: "cas",
       netid,
-      name: String(claims.name ?? netid),
-      email,
+      name: attribute(attributes, "displayName") ?? attribute(attributes, "displayname")
+        ?? attribute(attributes, "cn") ?? netid,
+      email: attribute(attributes, "mail") ?? `${netid}@princeton.edu`,
       exp: Math.floor(Date.now() / 1000) + SESSION_TTL_S,
     };
     const token = await signToken(session, env.SESSION_SECRET);
-    return new Response(null, {
+    return response(null, {
       status: 302,
       headers: [
         ["location", "/"],
         ["set-cookie", cookie(SESSION_COOKIE, token, SESSION_TTL_S)],
-        ["set-cookie", cookie(OAUTH_COOKIE, "", 0)],
+        ["set-cookie", cookie(CAS_COOKIE, "", 0)],
+        ["set-cookie", cookie("pi_oauth", "", 0)],
       ],
     });
   }
 
   if (url.pathname === "/auth/logout") {
-    return new Response(null, {
+    // Sign out of PI only; other Princeton services keep their CAS session.
+    return response(null, {
       status: 302,
-      headers: {
-        location: "/",
-        "set-cookie": cookie(SESSION_COOKIE, "", 0),
-      },
+      headers: [
+        ["location", "/"],
+        ["set-cookie", cookie(SESSION_COOKIE, "", 0)],
+        ["set-cookie", cookie(CAS_COOKIE, "", 0)],
+        ["set-cookie", cookie("pi_oauth", "", 0)],
+      ],
     });
   }
 
@@ -284,94 +265,4 @@ export async function handleAuth(
 /** DO instance-name prefix owned by a user; the Worker enforces it. */
 export function userPrefix(netid: string): string {
   return `u-${netid}-`;
-}
-
-/* ── alias → netid via OIT's ActiveDirectory API ──────────────────── */
-
-const OIT_TOKEN_URL = "https://api.princeton.edu/token";
-const DEFAULT_AD_BASE = "https://api.princeton.edu/active-directory/1.0.6";
-
-/** WSO2 access token, cached for the isolate's lifetime. */
-let oitTokenCache: { token: string; exp: number } | null = null;
-
-async function oitToken(env: Env): Promise<string> {
-  if (oitTokenCache && oitTokenCache.exp > Date.now() / 1000 + 30) {
-    return oitTokenCache.token;
-  }
-  const res = await fetch(OIT_TOKEN_URL, {
-    method: "POST",
-    headers: {
-      authorization: `Basic ${btoa(`${env.OIT_CONSUMER_KEY}:${env.OIT_CONSUMER_SECRET}`)}`,
-      "content-type": "application/x-www-form-urlencoded",
-    },
-    body: "grant_type=client_credentials",
-  });
-  if (!res.ok) throw new Error(`OIT token grant failed: ${res.status}`);
-  const body = (await res.json()) as {
-    access_token: string;
-    expires_in?: number;
-  };
-  oitTokenCache = {
-    token: body.access_token,
-    exp: Date.now() / 1000 + (body.expires_in ?? 3000),
-  };
-  return body.access_token;
-}
-
-async function oitUsersLookup(
-  env: Env,
-  token: string,
-  params: Record<string, string>
-): Promise<string | null> {
-  const base = (env.OIT_AD_BASE || DEFAULT_AD_BASE).replace(/\/$/, "");
-  const res = await fetch(`${base}/users?${new URLSearchParams(params)}`, {
-    headers: { authorization: `Bearer ${token}`, accept: "application/json" },
-  });
-  if (!res.ok) return null;
-  const text = await res.text();
-  if (!text.trim() || text.startsWith("<")) return null;
-  try {
-    const data = JSON.parse(text) as unknown;
-    const list = Array.isArray(data)
-      ? data
-      : typeof data === "object" && data != null
-        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ((data as any).users ?? (data as any).result ?? [data])
-        : [];
-    for (const entry of list) {
-      const uid = entry?.uid ?? entry?.netid;
-      if (typeof uid === "string" && uid) return uid.toLowerCase();
-    }
-  } catch {
-    /* fall through */
-  }
-  return null;
-}
-
-/**
- * Map a sign-in email to the real netid. The email's local part may be an
- * alias, so the directory (`mail` attribute) is authoritative; if lookup is
- * unavailable or misses, the local part is the best remaining guess.
- */
-async function resolveNetid(
-  email: string,
-  localpart: string,
-  env: Env
-): Promise<string> {
-  if (!env.OIT_CONSUMER_KEY || !env.OIT_CONSUMER_SECRET) {
-    console.warn("OIT credentials not set — using email local part as netid");
-    return localpart;
-  }
-  try {
-    const token = await oitToken(env);
-    const byMail = await oitUsersLookup(env, token, { mail: email });
-    if (byMail) return byMail;
-    // The local part may already be the netid — confirm against the directory.
-    const byUid = await oitUsersLookup(env, token, { uid: localpart });
-    if (byUid === localpart) return localpart;
-    console.warn(`OIT lookup could not resolve ${email}; using local part`);
-  } catch (err) {
-    console.warn("OIT lookup failed", err);
-  }
-  return localpart;
 }

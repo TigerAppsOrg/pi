@@ -7,7 +7,7 @@ on:
 
 jobs:
   check:
-    name: Typecheck & build
+    name: Test, typecheck & build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -23,6 +23,7 @@ jobs:
       - run: cp .dev.vars.example .dev.vars
       - run: npx wrangler types
       - run: npm run typecheck
+      - run: npm test
       - run: npm run build
 
   deploy:
