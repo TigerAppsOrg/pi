@@ -211,7 +211,8 @@ export async function handleAuth(
     try {
       const res = await fetch(validate, {
         headers: { accept: "application/json" },
-        redirect: "error",
+        // Workers supports manual/follow only; !res.ok below rejects redirects.
+        redirect: "manual",
         signal: AbortSignal.timeout(10_000),
       });
       if (!res.ok) return fail("Princeton CAS is unavailable", 502);
