@@ -4,7 +4,13 @@
  * (connection management) and the client (the "My apps" page).
  */
 
-export type AppKey = "junction" | "princetoncourses" | "path" | "snatch" | "gcal";
+export type AppKey =
+  | "junction"
+  | "princetoncourses"
+  | "path"
+  | "snatch"
+  | "tigerinbox"
+  | "gcal";
 
 export type PiApp = {
   key: AppKey;
@@ -26,7 +32,7 @@ export type PiApp = {
    * app is one color everywhere, so this must stay in step with APP_INK in
    * client/lib/tools.ts, which paints the same apps in chat and on the agenda.
    */
-  ink: "cyan" | "orange" | "violet" | "pink" | "mint";
+  ink: "cyan" | "orange" | "violet" | "pink" | "mint" | "lemon";
   /** Whether tools need to know who the user is to be useful. */
   personal: boolean;
   /** Which section of My apps this belongs under. */
@@ -88,6 +94,23 @@ export const PI_APPS: PiApp[] = [
       "Course registration did you dirty? Watch a full section and hear about it the moment a spot opens up.",
     ink: "pink",
     personal: true,
+    kind: "app",
+  },
+  {
+    key: "tigerinbox",
+    home: "https://inbox.tigerapps.org",
+    logo: "/logos/tigerinbox.svg",
+    glyph: "TI",
+    name: "TigerInbox",
+    // TigerInbox serves its own read-only MCP; PI authenticates with a
+    // dedicated connector token (TIGERINBOX_MCP_TOKEN), never a student's session.
+    mcpPath: "",
+    mcpUrl: "https://inbox.tigerapps.org/api/mcp",
+    tagline: "what the listservs said",
+    detail:
+      "Every residential-college and FreeFood email, deduplicated and searchable. Find the study break, the deadline, or who's hosting what — with a link to the original email.",
+    ink: "lemon",
+    personal: false,
     kind: "app",
   },
   {
