@@ -45,12 +45,18 @@ browser (React + useAgentChat over WebSocket)
   Sessions issued before the CAS migration require a fresh sign-in. Existing
   chats remain under their NetID; any historical email-alias namespaces are
   not automatically reassigned.
-- **Planner**: mirrors TigerJunction's ReCal calendar — its default color
-  palette, solid blocks with an ink left border for locked-in sections, and
-  striped translucent blocks for section options not picked yet. The engine
-  returns every section of every course, so the client merges duplicate
-  times, marks single-time section types as confirmed, and recomputes
-  conflicts among confirmed sections only.
+- **Planner**: renders a native weekly calendar with TigerJunction's course
+  colors and only explicitly selected sections. Available sections are never
+  treated as selected, even when there is only one option. The engine must
+  return a `selected` boolean per section from ReCal's `metadata.confirms`;
+  older responses show an unavailable-selection state instead of a guessed
+  timetable. Conflicts are recomputed among selected sections only.
+- **Workspaces**: private to the signed-in NetID, persisted in the user's desk
+  Durable Object through `/api/workspaces`. Students can organize chats, save
+  course links, and maintain context notes. Assigned chats receive those notes
+  and references on each turn, not other chats' transcripts. Deleting a
+  workspace preserves its chats. This is not a shared/collaborative workspace
+  or a file-storage feature.
 - **UI**: `src/client/` — chat with inline tool renders, message actions
   (copy / rewind / fork / retry), a model switcher in the composer, a
   full-page weekly Planner, an Agenda, and My apps. Design system in
@@ -75,8 +81,11 @@ npm run dev
 `npm run typecheck` needs `worker-configuration.d.ts` — generate it with
 `npx wrangler types` (CI does this automatically).
 
-`npm test` runs the auth flow tests with Node 22.6 or newer, including ticket
-validation, browser state, expired/tampered cookies, and session migration.
+`npm test` runs TypeScript tests with `tsx`, including auth ticket validation,
+browser state, expired/tampered cookies, session migration, workspace storage
+and context isolation, and native tool-result extraction. `tests/native-cards.html`
+is a local visual fixture for selected/unselected schedules and course cards;
+it is not included in the production entry point.
 Local CAS sign-in requires a callback origin permitted by Princeton CAS;
 use an approved HTTPS development origin if localhost is not permitted.
 

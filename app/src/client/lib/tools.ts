@@ -107,9 +107,7 @@ export type Meeting = {
   endLabel: string;
   room: string | null;
   /**
-   * TigerJunction semantics: a section type with exactly one meeting time is
-   * locked in; multiple times means the student hasn't picked yet, and those
-   * render as striped "options".
+   * True only when the payload explicitly identifies a chosen section.
    */
   confirmed: boolean;
   conflicted: boolean;
@@ -133,6 +131,7 @@ export type ScheduleView = {
   /** Overlaps among confirmed sections only, computed client-side. */
   conflicts: string[];
   courses: CourseLegend[];
+  selectionKnown?: boolean;
 };
 
 /**
@@ -199,7 +198,9 @@ export function extractSchedule(data: unknown): ScheduleView | null {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const d = data as any;
   const sections = d.sections ?? d.meetings;
-  if (!Array.isArray(sections) || sections.length === 0) return null;
+  if (!Array.isArray(sections)) return null;
+  const selectedIds = d.selectedSectionIds ?? d.schedule?.selectedSectionIds;
+  let selectionKnown = Array.isArray(selectedIds);
 
   type Raw = {
     courseCode: string;
@@ -211,6 +212,7 @@ export function extractSchedule(data: unknown): ScheduleView | null {
     startLabel: string;
     endLabel: string;
     room: string | null;
+    selected: boolean;
   };
   const raw: Raw[] = [];
   for (const s of sections) {
@@ -224,6 +226,8 @@ export function extractSchedule(data: unknown): ScheduleView | null {
         : [];
     const startLabel = String(s.startTime ?? "TBA");
     const endLabel = String(s.endTime ?? "TBA");
+    const selected = s.selected ?? s.isSelected ?? s.confirmed;
+    if (typeof selected === "boolean") selectionKnown = true;
     raw.push({
       courseCode,
       title,
@@ -234,9 +238,13 @@ export function extractSchedule(data: unknown): ScheduleView | null {
       startLabel,
       endLabel,
       room: s.room ?? null,
+      selected: selected === true || (Array.isArray(selectedIds) && selectedIds.some((id: unknown) => s.id != null && String(id) === String(s.id))),
     });
   }
-  if (raw.length === 0) return null;
+  if (raw.length === 0) {
+    if (!d.schedule) return null;
+    return { title: d.schedule.title, termName: d.schedule.termName, meetings: [], conflicts: [], tba: [], courses: [], selectionKnown: true };
+  }
 
   // The deployed engine renders TigerJunction's Supabase times as if the
   // stored value were minutes-past-8am, but junction actually stores
@@ -247,6 +255,7 @@ export function extractSchedule(data: unknown): ScheduleView | null {
   const timed = raw.filter((r) => r.startMin != null);
   const compressed =
     timed.length > 0 &&
+    timed.some((r) => !Number.isInteger(r.startMin) || (r.endMin != null && !Number.isInteger(r.endMin))) &&
     timed.every(
       (r) => r.startMin! < 600 && (r.endMin == null || r.endMin < 600)
     );
@@ -276,7 +285,7 @@ export function extractSchedule(data: unknown): ScheduleView | null {
   const tbaCodes = new Set<string>();
   for (const r of raw) {
     if (r.startMin == null || r.days.length === 0) {
-      tbaCodes.add(r.courseCode);
+      if (r.selected) tbaCodes.add(r.courseCode);
       continue;
     }
     const key = [
@@ -285,6 +294,7 @@ export function extractSchedule(data: unknown): ScheduleView | null {
       [...r.days].sort().join(","),
       r.startMin,
       r.endMin,
+      r.selected,
     ].join("|");
     const hit = merged.get(key);
     if (hit) {
@@ -316,7 +326,7 @@ export function extractSchedule(data: unknown): ScheduleView | null {
       startLabel: m.startLabel,
       endLabel: m.endLabel,
       room: m.room,
-      confirmed: (slotsPerType.get(`${m.courseCode}|${m.category}`) ?? 1) === 1,
+      confirmed: m.selected,
       conflicted: false,
       color: colorOf.get(m.courseCode) ?? 0,
     };
@@ -348,19 +358,18 @@ export function extractSchedule(data: unknown): ScheduleView | null {
   const courses: CourseLegend[] = [...colorOf.entries()].map(
     ([code, color]) => {
       const pending = new Set<string>();
-      for (const [key, count] of slotsPerType) {
+      for (const [key] of slotsPerType) {
         const [c, cat] = key.split("|");
-        if (c === code && count > 1) pending.add(cat);
+        if (c === code && !raw.some((r) => r.courseCode === code && r.category === cat && r.selected)) pending.add(cat);
       }
       return { code, color, pending: [...pending].sort() };
     }
   );
 
-  if (meetings.length === 0 && tbaCodes.size === 0) return null;
-
   return {
     title: d.schedule?.title,
     termName: d.schedule?.termName,
+    selectionKnown,
     meetings,
     tba: [...tbaCodes].sort(),
     conflicts,
@@ -389,6 +398,9 @@ export type CourseRowData = {
   status?: string;
   rating?: number | null;
   meta?: string;
+  distributions?: string[];
+  gradingBasis?: string;
+  hasFinal?: boolean;
   /** Students waiting for a seat, when the payload counts them. */
   waiting?: number;
   /** Deep link to this offering on PrincetonCourses, when derivable. */
@@ -447,10 +459,8 @@ export function extractCourses(
           ? c.score
           : typeof c.overallRating === "number"
             ? c.overallRating
-            : null;
+            : typeof c.latestRating === "number" ? c.latestRating : null;
     const bits: string[] = [];
-    if (typeof c.dist === "string" && c.dist) bits.push(c.dist);
-    if (Array.isArray(c.dists)) bits.push(c.dists.join(", "));
     if (typeof c.termName === "string") bits.push(c.termName);
     else if (typeof c.term === "number") {
       const name = termCodeToName(c.term);
@@ -468,6 +478,9 @@ export function extractCourses(
       status: c.status ? String(c.status) : undefined,
       rating,
       meta: bits.join(" · ") || undefined,
+      distributions: Array.isArray(c.dists) ? c.dists.filter((v: unknown) => typeof v === "string") : typeof c.dist === "string" ? [c.dist] : [],
+      gradingBasis: typeof c.gradingBasis === "string" ? c.gradingBasis : undefined,
+      hasFinal: typeof c.hasFinal === "boolean" ? c.hasFinal : undefined,
       waiting: waiting ?? undefined,
       pcUrl: pcCourseUrl(c),
       snatchUrl: httpUrl(c.course_page_url) ?? undefined,

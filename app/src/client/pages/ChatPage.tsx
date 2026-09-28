@@ -31,6 +31,8 @@ import {
 } from "../components/Icons";
 import { Markdown } from "../components/Markdown";
 import { ToolRender } from "../components/ToolCards";
+import { ChatWorkspaceBar } from "../components/WorkspaceControls";
+import { useWorkspaces } from "../lib/workspaces";
 import { reportUnauthorized, userInstance, type Identity } from "../lib/auth";
 import {
   dismissNotes,
@@ -177,6 +179,8 @@ function ChatBody({
     isRecovering,
   } = chat;
   const chats = useChats(identity.netid);
+  const workspaces = useWorkspaces();
+  const workspace = workspaces.state.workspaces.find((w) => w.id === workspaces.state.chats.find((c) => c.id === chatId)?.workspaceId);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   /** False once the student scrolls away from the bottom to read back. */
@@ -329,6 +333,9 @@ function ChatBody({
       title: firstTitle(messages) ?? text.slice(0, 48),
       at: Date.now(),
     });
+    if (workspaces.state.chats.some((c) => c.id === chatId)) {
+      void workspaces.change({ type: "touch", chatId, title: firstTitle(messages) ?? text.slice(0, 48), at: Date.now() }).catch(() => {});
+    }
     setSendFailure(null);
     // The words go on screen now, not after the settings push resolves. The
     // ordinal is the slot this message will occupy among the user's turns,
@@ -407,6 +414,8 @@ function ChatBody({
         title: `${base} (offshoot)`.slice(0, 48),
         at: Date.now(),
       });
+      const membership = workspaces.state.chats.find((c) => c.id === chatId);
+      if (membership) await workspaces.change({ type: "assign", chatId: id, workspaceId: membership.workspaceId, title: `${base} (offshoot)`.slice(0, 48), at: Date.now() });
       if (draftText) {
         try {
           sessionStorage.setItem(`pi:draft:${id}`, draftText);
@@ -464,6 +473,7 @@ function ChatBody({
 
   return (
     <>
+      <ChatWorkspaceBar chatId={chatId} title={chats.find((c) => c.id === chatId)?.title ?? "New chat"} navigate={navigate} busy={busy || pending.length > 0} />
       {connectionError && (
         <div className="conn-strip" role="alert">
           <span title={connectionError.reason}>
@@ -487,13 +497,12 @@ function ChatBody({
                     <PiMark size={30} />
                   </span>
                   <h1>
-                    Hello <span className="name hand-underline">{name}</span>,
+                    {workspace ? workspace.name : <>Hello <span className="name hand-underline">{name}</span>,</>}
                   </h1>
                   <p>
-                    what are we working on?{" "}
-                    <span className="hand">
+                    {workspace ? workspace.context ? workspace.context.slice(0, 180) + (workspace.context.length > 180 ? "..." : "") : "A new conversation" : <>what are we working on?{" "}<span className="hand">
                       pick one below, or just start typing
-                    </span>
+                    </span></>}
                   </p>
                   <div className="prompts">
                     {prompts.length > 0 ? (
@@ -519,11 +528,11 @@ function ChatBody({
                     )}
                   </div>
                 </div>
-                <HomeNotes
+                {!workspace && <HomeNotes
                   netid={identity.netid}
                   apps={settings.apps}
                   navigate={navigate}
-                />
+                />}
               </>
             ) : (
               <div

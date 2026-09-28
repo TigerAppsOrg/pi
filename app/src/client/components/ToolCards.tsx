@@ -25,10 +25,13 @@ import {
   type ToolView,
   type TrendingView,
   type WatchesView,
+  type CourseRowData,
 } from "../lib/tools";
 import { IconCheck, IconExternal, IconX } from "./Icons";
 import { WeekGrid } from "./WeekGrid";
+import { SaveSourceButton } from "./WorkspaceControls";
 import "../styles/snatch.css";
+import "../styles/native-cards.css";
 
 const MAX_ROWS = 8;
 
@@ -159,59 +162,9 @@ export function ToolRender({ view, onSend, settled = false }: ToolRenderProps) {
   }
 
   if (courses) {
-    const shown = courses.slice(0, MAX_ROWS);
     return (
       <ToolCard view={view} label={cardLabel(view)}>
-        <div className="course-rows">
-          {shown.map((c, i) => {
-            const name = (
-              <>
-                <span className="code">{c.code}</span>
-                <span className="ctitle">{c.title}</span>
-              </>
-            );
-            return (
-              <div key={i} className="course-row">
-                {c.pcUrl ? (
-                  <a
-                    className="course-link"
-                    href={c.pcUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="Ratings and reviews on PrincetonCourses"
-                  >
-                    {name}
-                  </a>
-                ) : c.snatchUrl ? (
-                  <a
-                    className="course-link"
-                    href={c.snatchUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="This course on TigerSnatch"
-                  >
-                    {name}
-                  </a>
-                ) : (
-                  name
-                )}
-                {c.meta && <span className="meta">{c.meta}</span>}
-                {c.waiting != null && (
-                  <span className="meta">{count(c.waiting)} waiting</span>
-                )}
-                {c.rating != null && (
-                  <span className="rating-chip">{c.rating.toFixed(2)}</span>
-                )}
-                {c.status && <StatusPill status={c.status} />}
-              </div>
-            );
-          })}
-        </div>
-        {courses.length > shown.length && (
-          <div className="card-more">
-            {courses.length - shown.length} more. Ask PI to narrow it down.
-          </div>
-        )}
+        <CourseResults courses={courses} onSend={onSend} settled={settled} />
       </ToolCard>
     );
   }
@@ -221,6 +174,27 @@ export function ToolRender({ view, onSend, settled = false }: ToolRenderProps) {
       checked {ownerName(view)}
     </ToolChip>
   );
+}
+
+function CourseResults({ courses, onSend, settled }: { courses: CourseRowData[]; onSend?: SendHandler; settled: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? courses : courses.slice(0, MAX_ROWS);
+  return <>
+    <div className="pc-results">{shown.map((c, i) => {
+      const url = c.pcUrl ?? c.snatchUrl;
+      return <article className="pc-course" key={`${c.code}-${url ?? i}`}>
+        <div className="pc-course-top"><strong className="pc-code">{c.code}</strong>
+          <div className="pc-tags">{c.distributions?.map((dist) => <span className="pc-dist" key={dist}>{dist}</span>)}{c.gradingBasis && <span className="pc-grading">{c.gradingBasis}</span>}</div>
+          {c.rating != null && Number.isFinite(c.rating) && <span className="pc-rating" title="Course rating" aria-label={`Course rating ${c.rating.toFixed(2)}`}>{c.rating.toFixed(2)}</span>}
+          {url && <SaveSourceButton title={c.title || c.code} code={c.code} url={url} />}
+        </div>
+        <h3>{url ? <a href={url} target="_blank" rel="noreferrer">{c.title || c.code}<IconExternal size={14} /></a> : c.title || c.code}</h3>
+        <div className="pc-course-meta">{c.meta && <span>{c.meta}</span>}{c.status && <StatusPill status={c.status} />}{c.waiting != null && <span>{count(c.waiting)} waiting</span>}</div>
+        {onSend && !settled && <button className="pc-ask" onClick={() => onSend(`Tell me more about ${c.code}${c.pcUrl ? ` (${c.pcUrl})` : ""}, including its evaluations and workload.`)}>Ask about this course</button>}
+      </article>;
+    })}</div>
+    {courses.length > MAX_ROWS && <button className="pc-show-more" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? "Show fewer courses" : `Show ${courses.length - MAX_ROWS} more courses`}</button>}
+  </>;
 }
 
 export function StatusPill({ status }: { status: string }) {

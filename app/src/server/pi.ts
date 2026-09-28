@@ -4,6 +4,8 @@ import { callable, getAgentByName } from "agents";
 import type { AgentMcpOAuthProvider } from "agents/mcp/do-oauth-client-provider";
 import { hasToolCall, tool, type UIMessage } from "ai";
 import { z } from "zod";
+import { EMPTY_WORKSPACES, workspaceContext, type WorkspaceState } from "../shared/workspaces";
+import { handleWorkspaceRequest, WORKSPACE_KEY } from "./workspaces";
 import {
   GCAL_CALLBACK_PATH,
   GCAL_MCP_URL,
@@ -514,6 +516,9 @@ export class Pi extends Think<Env, PiState> {
     const inherited = await super.beforeTurn(ctx);
     const settings = this.getConfig<PiSettings>();
     if (!settings) return inherited ?? undefined;
+    const workspaceNote = await (await this.deskStub(settings.netid)).getWorkspaceContext(
+      this.name.slice(`u-${settings.netid}-`.length)
+    );
     /** Apps the model was told it has, that this turn hasn't got. */
     let missing: string[] = [];
     try {
@@ -579,9 +584,9 @@ export class Pi extends Think<Env, PiState> {
       // lost an app can only correct the record here — otherwise the model
       // reads "Connected TigerApps: TigerJunction" and answers with the
       // confidence that implies, on no data at all.
-      ...(missing.length > 0
+      ...(missing.length > 0 || workspaceNote
         ? {
-            system: `${inherited?.system ?? ctx.system}\n\n${missingAppsNote(missing)}`,
+            system: [inherited?.system ?? ctx.system, workspaceNote, missing.length > 0 ? missingAppsNote(missing) : ""].filter(Boolean).join("\n\n"),
           }
         : {}),
       // The elicitation tools go on last: an app server can register any
@@ -801,6 +806,17 @@ export class Pi extends Think<Env, PiState> {
 
   private async deskStub(netid: string) {
     return getAgentByName(this.env.Pi, `u-${netid}-desk`);
+  }
+
+  /** Internal RPC, reached only through the authenticated user's desk. */
+  async workspaceRequest(request: Request): Promise<Response> {
+    if (!this.isDesk()) return new Response("Not found", { status: 404 });
+    return handleWorkspaceRequest(request, this.ctx.storage);
+  }
+
+  async getWorkspaceContext(chatId: string): Promise<string> {
+    if (!this.isDesk()) return "";
+    return workspaceContext((await this.ctx.storage.get<WorkspaceState>(WORKSPACE_KEY)) ?? EMPTY_WORKSPACES, chatId);
   }
 
   /** DO-RPC: read the stored Google tokens (desk instance only). */

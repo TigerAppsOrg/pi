@@ -1,6 +1,8 @@
 import { AgentClient } from "agents/client";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { userInstance, type Identity } from "../lib/auth";
+import { useWorkspaces } from "../lib/workspaces";
+import { WorkspaceEditor } from "./WorkspaceControls";
 import {
   formatChatTime,
   GENERAL_CHAT_ID,
@@ -27,6 +29,7 @@ export type Route =
   | { page: "planner" }
   | { page: "agenda" }
   | { page: "apps" }
+  | { page: "workspaces"; workspaceId?: string }
   | { page: "notfound" };
 
 type NavItem = {
@@ -102,6 +105,8 @@ export function Sidebar({
   identity: Identity;
   appCount: number;
 }) {
+  const workspaces = useWorkspaces();
+  const [newWorkspace, setNewWorkspace] = useState(false);
   const activeChatId = route.page === "chat" ? route.chatId : null;
   const [query, setQuery] = useState("");
   const [showAll, setShowAll] = useState(false);
@@ -140,6 +145,7 @@ export function Sidebar({
     setConfirmId(null);
     forgetTranscript(identity.netid, chat.id);
     removeChat(identity.netid, chat.id);
+    void workspaces.change({ type: "assign", chatId: chat.id, workspaceId: null, title: chat.title || "Chat", at: chat.at }).catch(() => {});
     if (chat.id === activeChatId) navigate("/");
   }
 
@@ -318,14 +324,14 @@ export function Sidebar({
 
         <section className="ws" aria-labelledby="sec-ws">
           <h2 className="chat-list-label" id="sec-ws">
-            workspaces <span className="soon-chip">soon</span>
+            <a href="/workspaces" onClick={(e) => inAppClick(e, () => navigate("/workspaces"))}>workspaces</a>
+            <button className="ws-icon" aria-label="New workspace" title="New workspace" onClick={() => setNewWorkspace(true)}><IconPlus size={15} /></button>
           </h2>
-          <p className="ws-row">
-            <IconPlus size={13} /> new workspace
-          </p>
-          <p className="ws-note">
-            one shared desk for a precept or a club, with its chats in it.
-          </p>
+          {workspaces.state.workspaces.slice(0, 8).map((w) => <a key={w.id} href={`/workspaces/${w.id}`} className={`workspace-nav color-${w.color}${route.page === "workspaces" && route.workspaceId === w.id ? " active" : ""}`} onClick={(e) => inAppClick(e, () => navigate(`/workspaces/${w.id}`))}><span className="workspace-dot" /><span>{w.name}</span><small>{workspaces.state.chats.filter((c) => c.workspaceId === w.id).length}</small></a>)}
+          {!workspaces.loading && workspaces.state.workspaces.length === 0 && <button className="workspace-nav" onClick={() => setNewWorkspace(true)}><IconPlus size={14} />New workspace</button>}
+          {workspaces.loading && <p className="ws-note">Loading...</p>}
+          {workspaces.error && <button className="ws-note" onClick={() => void workspaces.refresh()}>Could not load. Retry</button>}
+          {workspaces.state.workspaces.length > 8 && <a className="browse-all" href="/workspaces" onClick={(e) => inAppClick(e, () => navigate("/workspaces"))}>All workspaces</a>}
         </section>
       </div>
 
@@ -357,6 +363,7 @@ export function Sidebar({
           </a>
         </p>
       </div>
+      {newWorkspace && <WorkspaceEditor onClose={() => setNewWorkspace(false)} onCreated={(id) => navigate(`/workspaces/${id}`)} />}
     </nav>
   );
 }
