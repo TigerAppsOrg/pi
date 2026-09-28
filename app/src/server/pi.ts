@@ -366,6 +366,12 @@ export class Pi extends Think<Env, PiState> {
         !enabled.has(app.key) ||
         (identityChanged && app.key !== "gcal") ||
         (app.key === "gcal" && !gcalEntitled) ||
+        // Bearer-token apps never need OAuth: a stored connection that failed or
+        // fell into an OAuth flow (e.g. after a rejected token) would otherwise
+        // stay stuck in that state for the life of the object. Drop it and
+        // reconnect fresh with the current credentials.
+        (app.key !== "gcal" &&
+          (server.state === "failed" || server.state === "authenticating")) ||
         server.server_url !== expectedUrl(app);
       if (stale) await this.removeMcpServer(id);
     }
@@ -466,6 +472,7 @@ export class Pi extends Think<Env, PiState> {
   private connectFailure(app: PiApp, err: unknown): string {
     const raw = err instanceof Error ? err.message : String(err);
     console.warn(`connect ${app.key} failed:`, raw);
+    if (app.key === "tigerinbox") void this.logTokenFingerprint();
     const text = raw.toLowerCase();
     const has = (...needles: string[]) => needles.some((n) => text.includes(n));
     if (has("timeout", "timed out", "abort")) {
@@ -873,6 +880,17 @@ export class Pi extends Think<Env, PiState> {
 
   private engineBase(): string {
     return (this.env.ENGINE_MCP_BASE || DEFAULT_ENGINE_BASE).replace(/\/$/, "");
+  }
+
+  /**
+   * Log a short SHA-256 fingerprint (never the value) of the configured
+   * TigerInbox token, so a mismatch with TigerInbox's own token is provable.
+   */
+  private async logTokenFingerprint(): Promise<void> {
+    const token = this.env.TIGERINBOX_MCP_TOKEN ?? "";
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+    const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+    console.warn(`tigerinbox token fingerprint: ${token ? hex.slice(0, 12) : "(empty)"}`);
   }
 
   /**
