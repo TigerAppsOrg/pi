@@ -1,6 +1,7 @@
 import type { Meeting, ScheduleView } from "../lib/tools";
 import { fmtRange, tjColor } from "../lib/tools";
 import { IconExternal } from "./Icons";
+import "../styles/native-cards.css";
 
 const DAY_COLUMNS = [
   ["Monday", "M"],
@@ -12,8 +13,6 @@ const DAY_COLUMNS = [
 
 const DAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const DAY_LABELS_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri"];
-
-const START = 8 * 60; // 8:00 AM
 
 function onDay(m: Meeting, full: string, short: string): boolean {
   return m.days.some((d) => {
@@ -60,7 +59,7 @@ function layoutDay(meetings: Meeting[]): Placed[] {
   return placed;
 }
 
-/** TigerJunction-style week calendar: solid course colors, striped options. */
+/** Only selected meetings belong on the calendar. Unpicked courses stay below. */
 export function WeekGrid({
   schedule,
   compact = false,
@@ -68,8 +67,9 @@ export function WeekGrid({
   schedule: ScheduleView;
   compact?: boolean;
 }) {
-  // Extend the day to fit evening sections (at least 8a–6p, at most 8a–11p).
-  const latest = Math.max(18 * 60, ...schedule.meetings.map((m) => m.endMin));
+  const meetings = schedule.meetings.filter((m) => m.confirmed);
+  const START = Math.max(0, Math.min(8 * 60, ...meetings.map((m) => Math.floor(m.startMin / 60) * 60)));
+  const latest = Math.max(18 * 60, ...meetings.map((m) => m.endMin));
   const END = Math.min(23 * 60, Math.ceil(latest / 60) * 60);
   const SPAN = END - START;
   const hours = SPAN / 60;
@@ -77,16 +77,17 @@ export function WeekGrid({
   const ticks: number[] = [];
   for (let h = START / 60; h <= END / 60; h += 2) ticks.push(h);
 
-  const hasOptions = schedule.meetings.some((m) => !m.confirmed);
+  const pending = schedule.courses.filter((c) => c.pending.length > 0);
 
   return (
-    <div>
+    <div className="junction-schedule">
+      {meetings.length === 0 ? <div className="schedule-empty"><strong>{schedule.courses.length ? "No selected sections to show" : "No courses in this schedule"}</strong><p>{schedule.selectionKnown === false ? "TigerJunction did not include your section choices in this result." : "Your selected meeting times will appear here."}</p><a href="https://junction.tigerapps.org/recalplus" target="_blank" rel="noreferrer">Open in TigerJunction <IconExternal size={14} /></a></div> : <div className="week-scroll" tabIndex={0} role="region" aria-label="Selected weekly schedule">
       <div
         className={compact ? "week compact" : "week"}
         style={
           {
             "--rows": hours,
-            "--week-h": compact ? `${hours * 26}px` : `${hours * 60}px`,
+            "--week-h": compact ? `${hours * 42}px` : `${hours * 60}px`,
           } as React.CSSProperties
         }
       >
@@ -110,7 +111,7 @@ export function WeekGrid({
             <div className="day-name">{compact ? DAY_LABELS_SHORT[di] : DAY_LABELS[di]}</div>
             <div className="day-col">
               {layoutDay(
-                schedule.meetings.filter((m) => onDay(m, full, short))
+                meetings.filter((m) => onDay(m, full, short))
               ).map(({ meeting: m, col, cols }, i) => {
                 const top = ((m.startMin - START) / SPAN) * 100;
                 const height = Math.max(
@@ -142,14 +143,14 @@ export function WeekGrid({
                     }}
                     title={`${m.courseCode} ${m.label} · ${m.startLabel}–${m.endLabel}${m.room ? ` · ${m.room}` : ""}${m.confirmed ? "" : " · option, pick in TigerJunction"}`}
                   >
-                    {!compact && duration >= 45 && cols <= 2 && (
+                    {duration >= 45 && cols <= 2 && (
                       <div className="btime">
                         {fmtRange(m.startMin, m.endMin)}
                       </div>
                     )}
                     <div className="bcode">
                       {m.courseCode}
-                      {!compact && cols <= 3 ? ` ${m.label}` : ""}
+                      {cols <= 3 ? ` ${m.label}` : ""}
                     </div>
                     {!compact && duration >= 75 && cols === 1 && m.room && (
                       <div className="bwhere">{m.room}</div>
@@ -161,8 +162,9 @@ export function WeekGrid({
           </div>
         ))}
       </div>
+      </div>}
 
-      {!compact && schedule.courses.length > 0 && (
+      {schedule.courses.length > 0 && (
         <div className="cal-legend">
           {schedule.courses.map((c) => (
             <span key={c.code} className="legend-chip">
@@ -176,7 +178,7 @@ export function WeekGrid({
               {c.code}
               {c.pending.length > 0 && (
                 <em className="legend-pending">
-                  {c.pending.join("/")} not picked
+                  {c.pending.join("/")} {schedule.selectionKnown === false ? "not provided" : "not picked"}
                 </em>
               )}
             </span>
@@ -195,9 +197,9 @@ export function WeekGrid({
         </div>
       )}
 
-      {!compact && hasOptions && (
+      {meetings.length > 0 && pending.length > 0 && (
         <p className="tba-note">
-          Striped blocks are section options you haven't locked in.{" "}
+          {pending.length} {pending.length === 1 ? "course has" : "courses have"} sections still to choose.{" "}
           <a
             href="https://junction.tigerapps.org"
             target="_blank"

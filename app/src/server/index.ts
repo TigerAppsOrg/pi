@@ -11,6 +11,16 @@ export default {
     const auth = await handleAuth(request, env);
     if (auth) return auth;
 
+    if (url.pathname === "/api/workspaces") {
+      const session = await getSession(request, env);
+      if (!session) return Response.json({ error: "Sign in again to open your workspaces." }, { status: 401 });
+      if (request.method !== "GET" && request.headers.get("origin") !== url.origin) {
+        return new Response("Forbidden", { status: 403 });
+      }
+      const desk = await getAgentByName(env.Pi, `${userPrefix(session.netid)}desk`);
+      return desk.workspaceRequest(request);
+    }
+
     // Google's OAuth redirect lands on one fixed URI; forward it to the
     // signed-in user's desk DO, which initiated the flow and holds the state.
     if (url.pathname === GCAL_CALLBACK_PATH) {

@@ -28,6 +28,8 @@ import {
 } from "./lib/store";
 import { SignInPage } from "./pages/SignInPage";
 import "./styles/shell.css";
+import "./styles/workspaces.css";
+import { WorkspaceProvider } from "./lib/workspaces";
 
 // Each destination is its own chunk: the sign-in page and the shell are the
 // only things a first visit has to download.
@@ -43,6 +45,7 @@ const AgendaPage = lazy(() =>
 const AppsPage = lazy(() =>
   import("./pages/AppsPage").then((m) => ({ default: m.AppsPage }))
 );
+const WorkspacesPage = lazy(() => import("./pages/WorkspacesPage").then((m) => ({ default: m.WorkspacesPage })));
 
 const BASE_TITLE = "PI, your Princeton desk";
 
@@ -50,10 +53,13 @@ const PAGE_TITLES: Record<string, string> = {
   planner: "Planner",
   agenda: "Agenda",
   apps: "My apps",
+  workspaces: "Workspaces",
   notfound: "Page not found",
 };
 
 function parseRoute(pathname: string): Route {
+  const workspace = pathname.match(/^\/workspaces(?:\/([\w-]+))?$/);
+  if (workspace) return { page: "workspaces", workspaceId: workspace[1] };
   const chat = pathname.match(/^\/chat\/([\w-]+)$/);
   if (chat) return { page: "chat", chatId: chat[1] };
   if (pathname === "/") return { page: "chat", chatId: null };
@@ -72,7 +78,9 @@ export function App() {
   }
   if (auth.status === "anon") return <SignInPage />;
   return (
-    <Desk identity={auth.identity} lapsed={auth.status === "expired"} />
+    <WorkspaceProvider key={auth.identity.netid} netid={auth.identity.netid}>
+      <Desk identity={auth.identity} lapsed={auth.status === "expired"} />
+    </WorkspaceProvider>
   );
 }
 
@@ -260,6 +268,11 @@ function Desk({
             {route.page === "apps" && (
               <Suspense fallback={<PageSkeleton label="your apps" />}>
                 <AppsPage identity={identity} settings={settings} />
+              </Suspense>
+            )}
+            {route.page === "workspaces" && (
+              <Suspense fallback={<PageSkeleton label="your workspaces" />}>
+                <WorkspacesPage key={route.workspaceId ?? "all"} id={route.workspaceId} netid={identity.netid} navigate={navigate} />
               </Suspense>
             )}
             {route.page === "notfound" && <NotFound navigate={navigate} />}
