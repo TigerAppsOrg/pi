@@ -10,3 +10,6 @@ SESSION_SECRET=""
 GOOGLE_OAUTH_CLIENT_ID=""
 GOOGLE_OAUTH_CLIENT_SECRET=""
 APP_ORIGIN=""
+
+# Connector token for TigerInbox's MCP (inbox.tigerapps.org/api/mcp); matches TIGERINBOX_MCP_TOKEN there.
+TIGERINBOX_MCP_TOKEN=""
