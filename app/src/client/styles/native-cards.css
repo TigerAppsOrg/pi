@@ -38,3 +38,9 @@
 .pc-ask:hover { text-decoration: underline; }
 .pc-show-more { margin: 12px 0 0; border: 0; background: none; color: var(--pi-deep); font-size: 12px; cursor: pointer; }
 @media (max-width: 600px) { .pc-results { grid-template-columns: 1fr; } .pc-code { font-size: 16px; } }
+.web-results { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.web-results li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; }
+.web-results a { display: inline-flex; align-items: center; gap: 5px; min-width: 0; color: var(--ink); font: 500 13px/1.45 var(--sans); text-decoration: none; overflow-wrap: anywhere; }
+.web-results a:hover { color: var(--pi-deep); text-decoration: underline; }
+.web-results .icon { flex-shrink: 0; color: var(--ink-faint); }
+.web-results .web-site { font: 11px/1.45 var(--sans); color: var(--ink-faint); }

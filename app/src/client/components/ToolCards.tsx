@@ -14,6 +14,7 @@ import {
   extractSubscriptionChange,
   extractTrending,
   extractWatches,
+  extractWebSearch,
   meetingLabel,
   ownerName,
   ownerOf,
@@ -25,6 +26,7 @@ import {
   type ToolView,
   type TrendingView,
   type WatchesView,
+  type WebSearchView,
   type CourseRowData,
 } from "../lib/tools";
 import { IconCheck, IconExternal, IconX } from "./Icons";
@@ -37,6 +39,9 @@ const MAX_ROWS = 8;
 
 /** A course rarely runs more sections than this; the rest are summarized. */
 const MAX_SECTIONS = 12;
+
+/** Pages listed under a web search; the answer cites the ones it used. */
+const MAX_WEB_RESULTS = 5;
 
 /**
  * Raw payloads are for `?debug=1` only. A student should never meet an MCP
@@ -71,6 +76,11 @@ export function ToolRender({ view, onSend, settled = false }: ToolRenderProps) {
     view.state === "input-available" ||
     view.state === "call" ||
     (view.data == null && view.errorText == null);
+
+  // Web search has no app behind it, so it skips the app-shaped error and
+  // card branches below.
+  const web = extractWebSearch(view);
+  if (web) return <WebSearch view={view} search={web} running={running} />;
 
   if (view.errorText || view.state === "output-error") {
     // Today "which section did you mean?" arrives as a tool error whose text
@@ -173,6 +183,58 @@ export function ToolRender({ view, onSend, settled = false }: ToolRenderProps) {
     <ToolChip view={view} running={false}>
       checked {ownerName(view)}
     </ToolChip>
+  );
+}
+
+/** What PI looked up on the web, with the pages that came back. */
+function WebSearch({
+  view,
+  search,
+  running,
+}: {
+  view: ToolView;
+  search: WebSearchView;
+  running: boolean;
+}) {
+  const what = search.query ? `“${search.query}”` : "that";
+  if (view.errorText || view.state === "output-error") {
+    return (
+      <ToolChip view={view} running={false} error>
+        the web search didn&rsquo;t go through
+      </ToolChip>
+    );
+  }
+  if (running) {
+    return (
+      <ToolChip view={view} running>
+        searching the web for {what}…
+      </ToolChip>
+    );
+  }
+  if (search.results.length === 0) {
+    return (
+      <ToolChip view={view} running={false}>
+        searched the web for {what}, nothing came back
+      </ToolChip>
+    );
+  }
+  return (
+    <ToolCard
+      view={view}
+      label={search.query ? `From the web · ${search.query}` : "From the web"}
+    >
+      <ul className="web-results">
+        {search.results.slice(0, MAX_WEB_RESULTS).map((r) => (
+          <li key={r.url}>
+            <a href={r.url} target="_blank" rel="noreferrer">
+              {r.title}
+              <IconExternal size={12} />
+            </a>
+            <span className="web-site">{r.site}</span>
+          </li>
+        ))}
+      </ul>
+    </ToolCard>
   );
 }
 
