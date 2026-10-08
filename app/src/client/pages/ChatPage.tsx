@@ -17,6 +17,7 @@ import {
   type PiModel,
   type PiSettings,
 } from "../../shared/apps";
+import { limitNote, type UsageStatus } from "../../shared/usage-limit";
 import { Composer } from "../components/Composer";
 import {
   IconArrowUp,
@@ -114,7 +115,11 @@ const PLACEHOLDERS = [
 ];
 
 /** The slice of the agent's state a chat listens to (see PiState on the server). */
-type ChatAgentState = { connectError?: string; gcalReady?: boolean };
+type ChatAgentState = {
+  connectError?: string;
+  gcalReady?: boolean;
+  usage?: UsageStatus;
+};
 
 type ChatPageProps = {
   chatId: string;
@@ -151,12 +156,15 @@ function ChatBody({
   // a consent card must not call it on until it has.
   const [engineNote, setEngineNote] = useState<string | null>(null);
   const [gcalReady, setGcalReady] = useState(false);
+  /** Why answers changed: Sonnet only, or nothing left this week. */
+  const [usageNote, setUsageNote] = useState<string | null>(null);
   const agent = useAgent({
     agent: "pi",
     name: userInstance(identity.netid, chatId),
     onStateUpdate: (state: ChatAgentState | null) => {
       setEngineNote(state?.connectError ?? null);
       setGcalReady(state?.gcalReady === true);
+      setUsageNote(state?.usage ? limitNote(state.usage) : null);
     },
   });
   // `getInitialMessages: null` short-circuits the get-messages fetch, so a
@@ -653,6 +661,11 @@ function ChatBody({
                     dismiss
                   </button>
                 </div>
+              </div>
+            )}
+            {usageNote && (
+              <div className="setup-note" role="status">
+                <span className="what">{usageNote}</span>
               </div>
             )}
             {(setupFailed || engineNote) && (

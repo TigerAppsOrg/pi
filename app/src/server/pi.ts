@@ -7,6 +7,16 @@ import { z } from "zod";
 import { EMPTY_WORKSPACES, workspaceContext, type WorkspaceState } from "../shared/workspaces";
 import { handleWorkspaceRequest, WORKSPACE_KEY } from "./workspaces";
 import {
+  TIER2_MODEL,
+  budgetFrom,
+  limitNote,
+  usageStatus,
+  type Budget,
+  type Spend,
+  type UsageStatus,
+} from "../shared/usage-limit";
+import { NOTICE_MODEL_ID, noticeModel } from "./notice-model";
+import {
   addStep,
   costUsd,
   emptyTurnUsage,
@@ -45,6 +55,8 @@ export type PiState = {
    * successful settings push.
    */
   connectError?: string;
+  /** The student's standing against the weekly budget, from their desk. */
+  usage?: UsageStatus;
 };
 
 const CLAUDE_MODELS = new Set(["claude-opus-5", "claude-sonnet-5"]);
@@ -233,18 +245,24 @@ export class Pi extends Think<Env, PiState> {
   }
 
   getModel() {
-    const settings = this.getConfig<PiSettings>();
-    const preference = settings?.model ?? DEFAULT_CLAUDE_MODEL;
+    const model = this.selectedModel();
+    this.turnModel = model;
+    return this.claude(model);
+  }
+
+  /** The Claude model the student picked in the composer. */
+  private selectedModel(): string {
+    const preference = this.getConfig<PiSettings>()?.model ?? DEFAULT_CLAUDE_MODEL;
+    // Stale configs may still carry the retired "campus" preference.
+    return CLAUDE_MODELS.has(preference) ? preference : DEFAULT_CLAUDE_MODEL;
+  }
+
+  private claude(model: string) {
     const key = this.env.ANTHROPIC_API_KEY;
     if (!key) {
       // No silent fallback model: fail the turn loudly so ops notices.
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
-    // Stale configs may still carry the retired "campus" preference.
-    const model = CLAUDE_MODELS.has(preference)
-      ? preference
-      : DEFAULT_CLAUDE_MODEL;
-    this.turnModel = model;
     return createAnthropic({ apiKey: key })(model);
   }
 
@@ -540,6 +558,24 @@ export class Pi extends Think<Env, PiState> {
     const inherited = await super.beforeTurn(ctx);
     const settings = this.getConfig<PiSettings>();
     if (!settings) return inherited ?? undefined;
+    // The weekly budget decides which model answers, or whether one does. An
+    // exhausted student gets the limit note from a stand-in model: no
+    // provider call, no app connections, nothing billed.
+    const usage = await this.readUsage(settings.netid);
+    if (usage?.blocked) {
+      this.turnModel = NOTICE_MODEL_ID;
+      return {
+        ...(inherited ?? {}),
+        model: noticeModel(limitNote(usage) ?? "You've used this week's PI allowance."),
+        activeTools: [],
+        maxSteps: 1,
+      };
+    }
+    // Past the Opus budget, every answer comes from Sonnet whatever the
+    // composer says, the same way PrincetonCourses steps down.
+    const selected = this.selectedModel();
+    const downgrade = usage?.tier === 2 && selected !== TIER2_MODEL;
+    this.turnModel = downgrade ? TIER2_MODEL : selected;
     const workspaceNote = await (await this.deskStub(settings.netid)).getWorkspaceContext(
       this.name.slice(`u-${settings.netid}-`.length)
     );
@@ -604,6 +640,7 @@ export class Pi extends Think<Env, PiState> {
         : [];
     return {
       ...(inherited ?? {}),
+      ...(downgrade ? { model: this.claude(TIER2_MODEL) } : {}),
       // The system prompt is assembled before this hook runs, so a turn that
       // lost an app can only correct the record here — otherwise the model
       // reads "Connected TigerApps: TigerJunction" and answers with the
@@ -664,7 +701,8 @@ export class Pi extends Think<Env, PiState> {
     this.turnUsage = null;
     try {
       const netid = this.getConfig<PiSettings>()?.netid ?? "";
-      const cost = costUsd(this.turnModel, usage);
+      const chat = this.name.slice(`u-${netid}-`.length);
+      const cost = this.turnModel === NOTICE_MODEL_ID ? 0 : costUsd(this.turnModel, usage);
       if (cost === null) {
         console.warn(`usage: no price for ${this.turnModel}, add it to MODEL_PRICES`);
       }
@@ -673,16 +711,44 @@ export class Pi extends Think<Env, PiState> {
           event: "pi.usage",
           status,
           user: netid ? await pseudonym(netid, this.env.SESSION_SECRET ?? "") : null,
-          chat: this.name.slice(`u-${netid}-`.length),
+          chat,
           model: this.turnModel,
           ...usage,
           costUsd: cost === null ? null : Math.round(cost * 1e6) / 1e6,
           ms: Date.now() - this.turnStartedAt,
         })
       );
+      // Counted whatever the turn's outcome: a failed or stopped turn was
+      // still billed for what it used.
+      if (netid && cost) {
+        this.publishUsage(await (await this.deskStub(netid)).usageRecord(chat, cost));
+      }
     } catch (err) {
       console.warn("usage: couldn't log this turn", err);
     }
+  }
+
+  /**
+   * The student's standing against the weekly budget, also pushed to this
+   * chat's clients so the page can say why answers changed. A desk that can't
+   * answer doesn't stop the turn: the budget guards cost, and an outage there
+   * shouldn't take PI down with it.
+   */
+  private async readUsage(netid: string): Promise<UsageStatus | null> {
+    try {
+      const status = await (await this.deskStub(netid)).usageStatus();
+      this.publishUsage(status);
+      return status;
+    } catch (err) {
+      console.warn("usage: couldn't read the weekly budget, letting the turn run", err);
+      return null;
+    }
+  }
+
+  /** Every setState reaches every client, so only a change is sent. */
+  private publishUsage(status: UsageStatus): void {
+    if (JSON.stringify(this.state?.usage) === JSON.stringify(status)) return;
+    this.setState({ ...this.state, usage: status });
   }
 
   /**
@@ -893,6 +959,53 @@ export class Pi extends Think<Env, PiState> {
   /** DO-RPC: persist Google tokens (desk instance only). */
   async gcalTokensSet(tokens: unknown): Promise<void> {
     await this.ctx.storage.put("gcal_tokens", tokens);
+  }
+
+  /** DO-RPC (desk only): count one turn's spend against the student's week. */
+  async usageRecord(chat: string, usd: number): Promise<UsageStatus> {
+    const now = Date.now();
+    const budget = this.budget();
+    this.usageTable();
+    if (usd > 0) {
+      this.ctx.storage.sql.exec(
+        "INSERT INTO pi_usage (at, micros, chat) VALUES (?, ?, ?)",
+        now,
+        Math.round(usd * 1_000_000),
+        chat
+      );
+    }
+    // Spend older than the window never counts again. Pruned here, on a write
+    // the turn already causes, so no timer has to wake the desk to do it.
+    this.ctx.storage.sql.exec("DELETE FROM pi_usage WHERE at <= ?", now - budget.windowMs);
+    return this.usageAt(now, budget);
+  }
+
+  /** DO-RPC (desk only): the student's standing against the weekly budget. */
+  async usageStatus(): Promise<UsageStatus> {
+    this.usageTable();
+    return this.usageAt(Date.now(), this.budget());
+  }
+
+  private usageAt(now: number, budget: Budget): UsageStatus {
+    const spends: Spend[] = [
+      ...this.ctx.storage.sql.exec<{ at: number; micros: number }>(
+        "SELECT at, micros FROM pi_usage WHERE at > ?",
+        now - budget.windowMs
+      ),
+    ].map((row) => ({ at: row.at, usd: row.micros / 1_000_000 }));
+    return usageStatus(spends, now, budget);
+  }
+
+  /** Spend lives on the desk: one ledger per student, shared by every chat. */
+  private usageTable(): void {
+    if (!this.isDesk()) throw new Error("usage is kept on the desk");
+    this.ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS pi_usage (at INTEGER NOT NULL, micros INTEGER NOT NULL, chat TEXT NOT NULL)"
+    );
+  }
+
+  private budget(): Budget {
+    return budgetFrom(this.env);
   }
 
   /** DO-RPC: whether the user has connected Google Calendar. */
