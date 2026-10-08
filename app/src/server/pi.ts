@@ -7,6 +7,14 @@ import { z } from "zod";
 import { EMPTY_WORKSPACES, workspaceContext, type WorkspaceState } from "../shared/workspaces";
 import { handleWorkspaceRequest, WORKSPACE_KEY } from "./workspaces";
 import {
+  addStep,
+  costUsd,
+  emptyTurnUsage,
+  pseudonym,
+  type StepUsage,
+  type TurnUsage,
+} from "./usage";
+import {
   GCAL_CALLBACK_PATH,
   GCAL_MCP_URL,
   GoogleOAuthProvider,
@@ -214,6 +222,12 @@ export class Pi extends Think<Env, PiState> {
    */
   chatStreamStallTimeoutMs = 120_000;
 
+  /** This turn's token counts so far (see usage.ts); null between turns. */
+  private turnUsage: TurnUsage | null = null;
+  private turnStartedAt = 0;
+  /** The model getModel() resolved, for pricing the turn. */
+  private turnModel = DEFAULT_CLAUDE_MODEL;
+
   getDefaultTimezone() {
     return "America/New_York";
   }
@@ -230,6 +244,7 @@ export class Pi extends Think<Env, PiState> {
     const model = CLAUDE_MODELS.has(preference)
       ? preference
       : DEFAULT_CLAUDE_MODEL;
+    this.turnModel = model;
     return createAnthropic({ apiKey: key })(model);
   }
 
@@ -520,6 +535,8 @@ export class Pi extends Think<Env, PiState> {
   override async beforeTurn(
     ctx: Parameters<Think["beforeTurn"]>[0]
   ): Promise<ReturnType<Think["beforeTurn"]> extends infer R ? Awaited<R> : never> {
+    this.turnUsage = emptyTurnUsage();
+    this.turnStartedAt = Date.now();
     const inherited = await super.beforeTurn(ctx);
     const settings = this.getConfig<PiSettings>();
     if (!settings) return inherited ?? undefined;
@@ -617,13 +634,55 @@ export class Pi extends Think<Env, PiState> {
 
   override async onChatResponse(result: Parameters<Think["onChatResponse"]>[0]) {
     await super.onChatResponse(result);
+    await this.logTurnUsage(result.status);
     await this.releaseIdleMcp();
   }
 
   override async onChatError(error: unknown, ctx?: Parameters<Think["onChatError"]>[1]) {
     const out = await super.onChatError(error, ctx);
+    await this.logTurnUsage("error");
     await this.releaseIdleMcp();
     return out;
+  }
+
+  /** Every model call in a turn is billed, so each one is added up. */
+  override async onStepEnd(ctx: Parameters<Think["onStepEnd"]>[0]) {
+    await super.onStepEnd(ctx);
+    if (this.turnUsage) {
+      this.turnUsage = addStep(this.turnUsage, ctx.usage as StepUsage);
+    }
+  }
+
+  /**
+   * One `pi.usage` line per turn, for the cost analysis. Runs once per turn:
+   * whichever of onChatResponse and onChatError comes first takes the total.
+   * Never allowed to fail the turn it's describing.
+   */
+  private async logTurnUsage(status: string): Promise<void> {
+    const usage = this.turnUsage;
+    if (!usage) return;
+    this.turnUsage = null;
+    try {
+      const netid = this.getConfig<PiSettings>()?.netid ?? "";
+      const cost = costUsd(this.turnModel, usage);
+      if (cost === null) {
+        console.warn(`usage: no price for ${this.turnModel}, add it to MODEL_PRICES`);
+      }
+      console.log(
+        JSON.stringify({
+          event: "pi.usage",
+          status,
+          user: netid ? await pseudonym(netid, this.env.SESSION_SECRET ?? "") : null,
+          chat: this.name.slice(`u-${netid}-`.length),
+          model: this.turnModel,
+          ...usage,
+          costUsd: cost === null ? null : Math.round(cost * 1e6) / 1e6,
+          ms: Date.now() - this.turnStartedAt,
+        })
+      );
+    } catch (err) {
+      console.warn("usage: couldn't log this turn", err);
+    }
   }
 
   /**
