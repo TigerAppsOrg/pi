@@ -652,6 +652,40 @@
 .composer.blocked {
   border-color: var(--edge-warn);
 }
+/* the mic sits quietly beside the stamp until it's listening */
+.composer .mic {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 12px 14px 11px 15px;
+  background: none;
+  color: var(--ink-faint);
+  transition: color var(--dur-1) var(--ease-out),
+    background-color var(--dur-1) var(--ease-out);
+}
+.composer .mic:hover {
+  color: var(--ink);
+  background: var(--pi-wash);
+}
+.composer .mic.listening {
+  color: var(--pi);
+  background: var(--pi-wash);
+  animation: mic-listen 1.4s var(--ease-out) infinite;
+}
+@keyframes mic-listen {
+  50% {
+    box-shadow: 0 0 0 4px var(--pi-wash);
+  }
+}
+.dictation-note {
+  max-width: 760px;
+  margin: var(--space-2) auto 0;
+  text-align: right;
+  font-size: var(--t-sm);
+  color: var(--ink-danger);
+}
 /* not centred fine print under the box — a note ranged into the right
    margin, so it reads as PI annotating its own composer */
 .composer-note {
@@ -674,7 +708,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .jump-latest,
-  .composer .send.stop.nudge {
+  .composer .send.stop.nudge,
+  .composer .mic.listening {
     animation: none;
   }
 }
