@@ -46,11 +46,13 @@ import {
   APP_INK,
   APP_REQUEST_PART,
   CHOICES_PART,
+  WEB_SEARCH_TOOL,
   appDisplayName,
   ownerOf,
   parseAppRequest,
   parseChoicesAsk,
   parseToolPart,
+  sourceName,
   type AppRequest,
   type ChoicesAsk,
 } from "../lib/tools";
@@ -937,6 +939,7 @@ function fmtClock(at: number): string {
  * said.
  */
 const TOOL_PHRASES: Record<string, string> = {
+  [WEB_SEARCH_TOOL]: "search the web",
   get_snatch_subscriptions: "check the seats you're watching",
   subscribe_to_snatch: "watch a section for a seat",
   unsubscribe_from_snatch: "stop watching a section",
@@ -1185,27 +1188,33 @@ function Turn({
  */
 function WorkedFrom({ message }: { message: UIMessage }) {
   const calls = useMemo(() => {
-    const out: Array<{ app: AppKey | null; base: string }> = [];
+    const out: Array<{ app: AppKey | null; base: string; name: string }> = [];
     for (const part of message.parts) {
       if (part.type === CHOICES_PART || part.type === APP_REQUEST_PART) {
         continue;
       }
       const tool = parseToolPart(part);
-      if (tool) out.push({ app: ownerOf(tool), base: tool.base });
+      if (tool) {
+        out.push({ app: ownerOf(tool), base: tool.base, name: sourceName(tool) });
+      }
     }
     return out;
   }, [message.parts]);
 
   if (calls.length === 0) return null;
 
-  const apps: Array<AppKey | null> = [];
-  for (const c of calls) if (!apps.includes(c.app)) apps.push(c.app);
+  // One entry per source as the student would name it: the web and PI's own
+  // file tools both have no app behind them, but they aren't the same source.
+  const sources: Array<{ app: AppKey | null; name: string }> = [];
+  for (const c of calls) {
+    if (!sources.some((s) => s.name === c.name)) sources.push(c);
+  }
 
   return (
     <div className="worked-from">
       <span>Worked from</span>
-      {apps.map((app) => (
-        <span className="wf-app" key={app ?? "pi"}>
+      {sources.map(({ app, name }) => (
+        <span className="wf-app" key={name}>
           <span
             className="wf-dot"
             style={
@@ -1214,7 +1223,7 @@ function WorkedFrom({ message }: { message: UIMessage }) {
               } as React.CSSProperties
             }
           />
-          {appDisplayName(app)}
+          {name}
         </span>
       ))}
       <details className="wf-detail">
@@ -1224,7 +1233,7 @@ function WorkedFrom({ message }: { message: UIMessage }) {
         <ul className="wf-list">
           {calls.map((c, i) => (
             <li key={i}>
-              <span>{appDisplayName(c.app)}</span>
+              <span>{c.name}</span>
               <span className="what">{humanTool(c.base)}</span>
             </li>
           ))}

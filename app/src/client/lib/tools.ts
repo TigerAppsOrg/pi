@@ -1227,6 +1227,64 @@ export function ownerInk(
   return owner ? APP_INK[owner] : fallback;
 }
 
+/* ── web search ──────────────────────────────────────────────────── */
+
+/** Claude's web search tool (see WEB_TOOLS in server/pi.ts). */
+export const WEB_SEARCH_TOOL = "web_search";
+
+export type WebResult = { url: string; title: string; site: string };
+
+export type WebSearchView = {
+  /** What PI searched for, when the call carried it. */
+  query: string | null;
+  results: WebResult[];
+};
+
+/**
+ * The query and the pages a web search came back with, deduplicated and
+ * limited to plain http(s) links. Null for any other tool. A failed search
+ * has no results array, so it reads as zero results here.
+ */
+export function extractWebSearch(
+  view: Pick<ToolView, "base" | "input" | "data">
+): WebSearchView | null {
+  if (view.base !== WEB_SEARCH_TOOL) return null;
+  const input = view.input as { query?: unknown } | null | undefined;
+  const query =
+    typeof input?.query === "string" && input.query.trim()
+      ? input.query.trim()
+      : null;
+  const results: WebResult[] = [];
+  const seen = new Set<string>();
+  for (const row of Array.isArray(view.data) ? view.data : []) {
+    const { url, title } = (row ?? {}) as { url?: unknown; title?: unknown };
+    if (typeof url !== "string" || seen.has(url)) continue;
+    let site: string;
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") continue;
+      site = parsed.hostname.replace(/^www\./, "");
+    } catch {
+      continue;
+    }
+    seen.add(url);
+    results.push({
+      url,
+      title: typeof title === "string" && title.trim() ? title.trim() : site,
+      site,
+    });
+  }
+  return { query, results };
+}
+
+/**
+ * Who a tool call is credited to in front of a student: the web for a web
+ * search, otherwise the app that owns the data.
+ */
+export function sourceName(view: { base: string; app: AppKey | null }): string {
+  return view.base === WEB_SEARCH_TOOL ? "The web" : ownerName(view);
+}
+
 /* ── elicitation parts ───────────────────────────────────────────── */
 
 /**
