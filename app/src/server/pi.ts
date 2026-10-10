@@ -39,8 +39,8 @@ export type PiState = {
   connectError?: string;
 };
 
-const CLAUDE_MODELS = new Set(["claude-opus-5", "claude-sonnet-5"]);
-const DEFAULT_CLAUDE_MODEL = "claude-opus-5";
+const CLAUDE_MODELS = new Set(["claude-opus-5-5", "claude-sonnet-5-5"]);
+const DEFAULT_CLAUDE_MODEL = "claude-opus-5-5";
 
 /** The apps PI may ask a student to switch on. */
 const APP_KEYS = PI_APPS.map((a) => a.key) as [AppKey, ...AppKey[]];

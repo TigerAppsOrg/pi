@@ -33,7 +33,7 @@ export const GENERAL_CHAT_TITLE = "PI general chat";
 /** User-tweakable preferences; identity is never stored here. */
 export type Prefs = { apps: AppKey[]; model: PiModel };
 
-const DEFAULT_PREFS: Prefs = { apps: DEFAULT_APPS, model: "claude-opus-5" };
+const DEFAULT_PREFS: Prefs = { apps: DEFAULT_APPS, model: "claude-opus-5-5" };
 
 /**
  * Stamped on every saved blob, so a one-time migration runs once. Bump it only
