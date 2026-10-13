@@ -15,7 +15,7 @@
     "@ai-sdk/anthropic": "^4.0.0",
     "@ai-sdk/react": "^4.0.45",
     "@cloudflare/think": "^0.16.0",
-    "agents": "^0.21.0",
+    "agents": "^0.28.1",
     "ai": "^7.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
