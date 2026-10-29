@@ -2,7 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { Think } from "@cloudflare/think";
 import { callable, getAgentByName } from "agents";
 import type { AgentMcpOAuthProvider } from "agents/mcp/do-oauth-client-provider";
-import { hasToolCall, tool, type UIMessage } from "ai";
+import { hasToolCall, tool, wrapLanguageModel, type UIMessage } from "ai";
 import { z } from "zod";
 import { EMPTY_WORKSPACES, workspaceContext, type WorkspaceState } from "../shared/workspaces";
 import { handleWorkspaceRequest, WORKSPACE_KEY } from "./workspaces";
@@ -16,6 +16,7 @@ import {
   type UsageStatus,
 } from "../shared/usage-limit";
 import { NOTICE_MODEL_ID, noticeModel } from "./notice-model";
+import { promptCache } from "./prompt-cache";
 import {
   addStep,
   costUsd,
@@ -60,7 +61,9 @@ export type PiState = {
 };
 
 const CLAUDE_MODELS = new Set(["claude-opus-5", "claude-sonnet-5"]);
-const DEFAULT_CLAUDE_MODEL = "claude-opus-5";
+// Sonnet by default (Ibraheem, 2026-10-29): the team is short on Claude credits,
+// and Opus stays a per-chat choice in the composer.
+const DEFAULT_CLAUDE_MODEL = "claude-sonnet-5";
 
 /** The apps PI may ask a student to switch on. */
 const APP_KEYS = PI_APPS.map((a) => a.key) as [AppKey, ...AppKey[]];
@@ -263,7 +266,9 @@ export class Pi extends Think<Env, PiState> {
       // No silent fallback model: fail the turn loudly so ops notices.
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
-    return createAnthropic({ apiKey: key })(model);
+    // Every Claude call goes through here, so this is where prompt caching
+    // lands: both the composer's model and the budget downgrade.
+    return wrapLanguageModel({ model: createAnthropic({ apiKey: key })(model), middleware: promptCache });
   }
 
   getSystemPrompt() {

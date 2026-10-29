@@ -19,7 +19,7 @@ export const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const DEFAULT_BUDGET: Budget = { tier1Usd: 3, tier2Usd: 1, windowMs: WEEK_MS };
 
-/** The model a student drops to once their Opus budget is spent. */
+/** The model a student drops to once tier 1 is spent. */
 export const TIER2_MODEL = "claude-sonnet-5";
 
 /**
@@ -47,7 +47,7 @@ export type Spend = { at: number; usd: number };
 export type UsageStatus = {
   spentUsd: number;
   limitUsd: number;
-  /** 1: any model. 2: Opus budget spent, Sonnet only. Exhausted: nothing left. */
+  /** 1: any model. 2: tier 1 spent, Sonnet only. Exhausted: nothing left. */
   tier: 1 | 2 | "exhausted";
   blocked: boolean;
   percentUsed: number;
@@ -121,8 +121,8 @@ export function limitNote(status: UsageStatus): string | null {
   }
   if (status.tier === 2) {
     return when
-      ? `You've used this week's Opus budget, so PI is answering with Sonnet 5 until ${when}.`
-      : "You've used this week's Opus budget, so PI is answering with Sonnet 5 for now.";
+      ? `You've used most of this week's PI budget, so PI is answering with Sonnet 5 until ${when}.`
+      : "You've used most of this week's PI budget, so PI is answering with Sonnet 5 for now.";
   }
   return null;
 }

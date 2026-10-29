@@ -36,7 +36,7 @@ test("past $3 it's Sonnet only, until enough old spend ages out", () => {
   assert.equal(s.blocked, false);
   // Dropping the $2 turn leaves $1.20, back under $3.
   assert.equal(s.resetAt, now - 5 * DAY + WEEK_MS);
-  assert.match(limitNote(s)!, /^You've used this week's Opus budget, so PI is answering with Sonnet 5 until Fri, Oct 16, 3:10 PM\.$/);
+  assert.match(limitNote(s)!, /^You've used most of this week's PI budget, so PI is answering with Sonnet 5 until Fri, Oct 16, 3:10 PM\.$/);
 });
 
 test("at $4 PI stops answering until the week rolls over far enough", () => {

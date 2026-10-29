@@ -294,8 +294,8 @@ export const DEFAULT_ENGINE_BASE = "https://junction-engine.tigerapps.org";
 export type PiModel = "claude-opus-5" | "claude-sonnet-5";
 
 export const PI_MODELS: Array<{ value: PiModel; label: string }> = [
-  { value: "claude-opus-5", label: "Opus 5, sharpest" },
   { value: "claude-sonnet-5", label: "Sonnet 5, quicker" },
+  { value: "claude-opus-5", label: "Opus 5, sharpest" },
 ];
 
 /** Settings the client pushes to a Pi agent instance. */
@@ -308,5 +308,5 @@ export type PiSettings = {
 export const DEFAULT_SETTINGS: PiSettings = {
   netid: "",
   apps: DEFAULT_APPS,
-  model: "claude-opus-5",
+  model: "claude-sonnet-5",
 };
