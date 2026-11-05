@@ -10,6 +10,7 @@ export type AppKey =
   | "path"
   | "snatch"
   | "tigerinbox"
+  | "tigermenus"
   | "gcal";
 
 export type PiApp = {
@@ -114,6 +115,23 @@ export const PI_APPS: PiApp[] = [
     kind: "app",
   },
   {
+    key: "tigermenus",
+    home: "https://menus.tigerapps.org",
+    logo: "/logos/tigermenus.png",
+    glyph: "TM",
+    name: "TigerMenus",
+    // TigerMenus serves its own public, read-only MCP: no token and no
+    // student identity headers.
+    mcpPath: "",
+    mcpUrl: "https://menus.tigerapps.org/api/mcp",
+    tagline: "what the dining halls are serving",
+    detail:
+      "Browse the daily offerings from Princeton's dining halls.",
+    ink: "orange",
+    personal: false,
+    kind: "app",
+  },
+  {
     key: "gcal",
     home: "https://calendar.google.com",
     logo: "/logos/googlecalendar.svg",
@@ -147,14 +165,6 @@ export type SoonApp = {
 };
 
 export const COMING_SOON: SoonApp[] = [
-  {
-    key: "tigermenus",
-    name: "TigerMenus",
-    lettermark: "TM",
-    blurb: "Browse the daily offerings from Princeton's dining halls.",
-    ink: "var(--hl-mint)",
-    kind: "app",
-  },
   {
     key: "tigerfoodies",
     name: "TigerFoodies",
@@ -193,6 +203,7 @@ export const DEFAULT_APPS: AppKey[] = [
   "princetoncourses",
   "path",
   "snatch",
+  "tigermenus",
 ];
 
 /**
