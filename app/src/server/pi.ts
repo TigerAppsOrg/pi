@@ -296,6 +296,14 @@ export class Pi extends Think<Env, PiState> {
             "- Cite the email: link its TigerInbox URL as [subject](url) so the student can open the original.",
           ]
         : []),
+      ...(enabled.has("tigermenus")
+        ? [
+            "",
+            "Dining (TigerMenus):",
+            "- Use get_menu for what the dining halls are serving. Say which hall, meal and date each answer comes from, and use dish names exactly as returned.",
+            "- Only name dishes get_menu returned. It has no allergen or nutrition data, so don't guess; say a hall hasn't posted when its meals are empty.",
+          ]
+        : []),
       ...(enabled.has("snatch")
         ? [
             "",
@@ -423,7 +431,9 @@ export class Pi extends Think<Env, PiState> {
             headers:
               app.key === "tigerinbox"
                 ? this.tigerInboxHeaders()
-                : this.engineHeaders(settings.netid),
+                : app.key === "tigermenus"
+                  ? {}
+                  : this.engineHeaders(settings.netid),
           },
         });
       } catch (err) {

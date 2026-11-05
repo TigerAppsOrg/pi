@@ -28,6 +28,8 @@ import {
   type CourseRowData,
 } from "../lib/tools";
 import { IconCheck, IconExternal, IconX } from "./Icons";
+import { MenuCard } from "./MenuCard";
+import "../styles/menus.css";
 import { WeekGrid } from "./WeekGrid";
 import { SaveSourceButton } from "./WorkspaceControls";
 import "../styles/snatch.css";
@@ -66,6 +68,10 @@ export type ToolRenderProps = {
  * a quiet chip otherwise.
  */
 export function ToolRender({ view, onSend, settled = false }: ToolRenderProps) {
+  if (view.app === "tigermenus" && view.base === "get_menu") {
+    return <MenuCard view={view} />;
+  }
+
   const running =
     view.state === "input-streaming" ||
     view.state === "input-available" ||
