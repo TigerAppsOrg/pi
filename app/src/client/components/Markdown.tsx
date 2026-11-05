@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import { IconExternal } from "./Icons";
+import { studentSourceLink } from "../../shared/source-links";
 
 /**
  * A deliberately small markdown renderer for chat prose: paragraphs, lists
@@ -36,10 +37,11 @@ function inline(text: string, keyBase: string): ReactNode[] {
     } else if (tok.startsWith("[")) {
       const lm = tok.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
       if (lm) {
-        const external = /^https?:\/\//i.test(lm[2]);
+        const link = studentSourceLink(lm[2]);
+        const external = /^https?:\/\//i.test(link.href);
         out.push(
-          <a key={key} href={lm[2]} target="_blank" rel="noreferrer">
-            {lm[1]}
+          <a key={key} href={link.href} target="_blank" rel="noreferrer">
+            {link.label ?? lm[1]}
             {external && <IconExternal size={12} />}
           </a>
         );

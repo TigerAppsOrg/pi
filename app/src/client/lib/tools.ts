@@ -1205,6 +1205,7 @@ export const APP_INK: Record<AppKey, string> = {
   path: "var(--hl-violet)",
   snatch: "var(--hl-pink)",
   tigerinbox: "var(--hl-lemon)",
+  tigerdraw: "var(--hl-orange)",
   tigermenus: "var(--hl-orange)",
   gcal: "var(--hl-mint)",
 };

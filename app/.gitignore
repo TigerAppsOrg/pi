@@ -3,3 +3,8 @@ dist
 .dev.vars
 .wrangler
 worker-configuration.d.ts
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
