@@ -313,9 +313,10 @@ function AppRow({
         <h3 className="app-name">{app.name}</h3>
         <p className="app-blurb">{app.detail}</p>
         <p className="app-reads label-xs">
-          {app.personal
-            ? "reads things that are yours"
-            : "reads public course data"}
+          {app.dataAccessLabel ??
+            (app.personal
+              ? "reads things that are yours"
+              : "reads public course data")}
         </p>
         {note}
       </div>

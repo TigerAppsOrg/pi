@@ -44,7 +44,11 @@ export function parseToolPart(part: any): ToolView | null {
   }
 
   const output = part.output ?? part.result;
-  const { data, errorText } = extractPayload(output);
+  // TigerMenus can flag a failed hall while returning menus for the others.
+  const { data, errorText } = extractPayload(
+    output,
+    app === "tigermenus" && base === "get_menu"
+  );
 
   return {
     toolName,
@@ -58,7 +62,7 @@ export function parseToolPart(part: any): ToolView | null {
 }
 
 /** Digs the JSON payload out of an MCP result envelope (or plain output). */
-function extractPayload(output: unknown): {
+function extractPayload(output: unknown, preserveErrorData = false): {
   data: unknown;
   errorText: string | null;
 } {
@@ -70,14 +74,23 @@ function extractPayload(output: unknown): {
     const o = output as {
       content?: Array<{ type?: string; text?: string }>;
       isError?: boolean;
+      structuredContent?: unknown;
     };
     if (Array.isArray(o.content)) {
       const text = o.content
         .filter((c) => c?.type === "text" && typeof c.text === "string")
         .map((c) => c.text)
         .join("\n");
-      if (o.isError) return { data: null, errorText: text || "Tool failed" };
-      return { data: tryJson(text), errorText: null };
+      if (o.isError) {
+        return {
+          data: preserveErrorData ? o.structuredContent ?? tryJson(text) : null,
+          errorText: text || "Tool failed",
+        };
+      }
+      return {
+        data: preserveErrorData ? o.structuredContent ?? tryJson(text) : tryJson(text),
+        errorText: null,
+      };
     }
     return { data: output, errorText: null };
   }

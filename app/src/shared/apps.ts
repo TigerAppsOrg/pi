@@ -36,6 +36,8 @@ export type PiApp = {
   ink: "cyan" | "orange" | "violet" | "pink" | "mint" | "lemon";
   /** Whether tools need to know who the user is to be useful. */
   personal: boolean;
+  /** App-specific explanation of the data PI can read. */
+  dataAccessLabel?: string;
   /** Which section of My apps this belongs under. */
   kind: "app" | "calendar";
 };
@@ -126,9 +128,10 @@ export const PI_APPS: PiApp[] = [
     mcpUrl: "https://menus.tigerapps.org/api/mcp",
     tagline: "what the dining halls are serving",
     detail:
-      "Browse the daily offerings from Princeton's dining halls.",
+      "Find what’s serving today or this week, by dining hall and meal.",
     ink: "orange",
     personal: false,
+    dataAccessLabel: "reads public dining menus",
     kind: "app",
   },
   {
