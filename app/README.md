@@ -72,6 +72,14 @@ browser (React + useAgentChat over WebSocket)
 
 ## Develop
 
+TigerDraw uses its own read-only MCP companion in the TigerDraw repository.
+Enable it in My apps after starting that service. Set `TIGERDRAW_MCP_URL` to
+`http://127.0.0.1:3333/mcp` for local development, and `TIGERDRAW_MCP_TOKEN` to
+its `MCP_ACCESS_TOKEN` if authentication is enabled. Production defaults to
+`https://draw.tigerapps.org/mcp`. PI forwards only this dedicated token, without
+Junction credentials or student identity. The endpoint must be deployed before
+hosted PI can reach it. No new database credentials are required.
+
 ```bash
 npm install
 cp .dev.vars.example .dev.vars   # fill in secrets as needed

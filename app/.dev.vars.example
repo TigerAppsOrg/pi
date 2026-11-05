@@ -13,3 +13,7 @@ APP_ORIGIN=""
 
 # Connector token for TigerInbox's MCP (inbox.tigerapps.org/api/mcp); matches TIGERINBOX_MCP_TOKEN there.
 TIGERINBOX_MCP_TOKEN=""
+
+# TigerDraw companion: set the URL for local development. Token matches MCP_ACCESS_TOKEN there.
+TIGERDRAW_MCP_URL="http://127.0.0.1:3333/mcp"
+TIGERDRAW_MCP_TOKEN=""

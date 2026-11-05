@@ -1,0 +1,33 @@
+.draw-results {
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.draw-room {
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+.draw-results p {
+  margin: 0.3rem 0;
+}
+.draw-results ul {
+  margin: 0.5rem 0;
+  padding-left: 1.2rem;
+}
+.draw-results li {
+  margin: 0.35rem 0;
+}
+.draw-results blockquote {
+  margin: 0.8rem 0;
+  padding: 0.3rem 0.8rem;
+  border-left: 2px solid var(--rule);
+}
+.draw-results blockquote footer,
+.draw-notice {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.draw-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.8rem;
+}

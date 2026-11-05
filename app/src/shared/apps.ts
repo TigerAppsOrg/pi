@@ -10,6 +10,7 @@ export type AppKey =
   | "path"
   | "snatch"
   | "tigerinbox"
+  | "tigerdraw"
   | "gcal";
 
 export type PiApp = {
@@ -110,6 +111,20 @@ export const PI_APPS: PiApp[] = [
     detail:
       "Every residential-college and FreeFood email, deduplicated and searchable. Find the study break, the deadline, or who's hosting what — with a link to the original email.",
     ink: "lemon",
+    personal: false,
+    kind: "app",
+  },
+  {
+    key: "tigerdraw",
+    home: "https://draw.tigerapps.org",
+    logo: "/logos/tigerdraw.svg",
+    glyph: "TD",
+    name: "TigerDraw",
+    mcpPath: "",
+    mcpUrl: "https://draw.tigerapps.org/mcp",
+    tagline: "rooms, reviews & floor plans",
+    detail: "Find and compare rooms, read student reviews, and see images and floor plans. PI can only read TigerDraw.",
+    ink: "orange",
     personal: false,
     kind: "app",
   },
@@ -225,6 +240,12 @@ export const COVERED_BY_JUNCTION: AppKey[] = [
  * not listed belong to the scope that served them.
  */
 export const TOOL_OWNERS: Record<string, AppKey> = {
+  list_buildings: "tigerdraw",
+  list_rooms: "tigerdraw",
+  get_room: "tigerdraw",
+  get_room_images: "tigerdraw",
+  get_floor_plan: "tigerdraw",
+  search_rooms: "tigerdraw",
   get_snatch_subscriptions: "snatch",
   subscribe_to_snatch: "snatch",
   unsubscribe_from_snatch: "snatch",

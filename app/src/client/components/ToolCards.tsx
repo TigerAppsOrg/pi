@@ -30,8 +30,11 @@ import {
 import { IconCheck, IconExternal, IconX } from "./Icons";
 import { WeekGrid } from "./WeekGrid";
 import { SaveSourceButton } from "./WorkspaceControls";
+import { TigerDrawResults } from "./TigerDrawResults";
+import { housingError } from "../lib/tigerdraw";
 import "../styles/snatch.css";
 import "../styles/native-cards.css";
+import "../styles/tigerdraw.css";
 
 const MAX_ROWS = 8;
 
@@ -73,6 +76,9 @@ export function ToolRender({ view, onSend, settled = false }: ToolRenderProps) {
     (view.data == null && view.errorText == null);
 
   if (view.errorText || view.state === "output-error") {
+    if (ownerOf(view) === "tigerdraw") {
+      return <ToolChip view={view} running={false} error><span>{housingError(view.errorText)}</span></ToolChip>;
+    }
     // Today "which section did you mean?" arrives as a tool error whose text
     // lists the sections. That's an answer, not a failure, so it renders as
     // the pick card instead of a red chip.
@@ -113,6 +119,10 @@ export function ToolRender({ view, onSend, settled = false }: ToolRenderProps) {
         checking {ownerName(view)}…
       </ToolChip>
     );
+  }
+
+  if (ownerOf(view) === "tigerdraw") {
+    return <ToolCard view={view} label={cardLabel(view)} link={{ href: "https://draw.tigerapps.org", label: "Open TigerDraw" }}><TigerDrawResults value={view.data} /></ToolCard>;
   }
 
   // TigerSnatch's payloads are read first: several of them carry a `sections`
