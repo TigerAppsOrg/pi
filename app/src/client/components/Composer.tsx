@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { IconSend, IconStop } from "./Icons";
+import { joinDictation, useDictation } from "../lib/dictation";
+import { IconMic, IconSend, IconStop } from "./Icons";
 
 const MAX_HEIGHT = 160;
 
@@ -24,6 +25,11 @@ export function Composer({
   /** True for a beat after Enter lands while PI is still writing. */
   const [blocked, setBlocked] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+  /** The draft as it stood when the mic went on; dictation continues it. */
+  const typedRef = useRef("");
+  const dictation = useDictation((spoken) =>
+    setText(joinDictation(typedRef.current, spoken))
+  );
 
   function grow(el: HTMLTextAreaElement) {
     el.style.height = "auto";
@@ -36,6 +42,21 @@ export function Composer({
       grow(ref.current);
     }
   }, [initialText]);
+
+  // Dictated text never passes through onChange, so size the box here.
+  useEffect(() => {
+    if (dictation.listening && ref.current) grow(ref.current);
+  }, [text, dictation.listening]);
+
+  function toggleMic() {
+    if (dictation.listening) {
+      dictation.stop();
+      return;
+    }
+    typedRef.current = text;
+    dictation.start();
+    ref.current?.focus();
+  }
 
   // The nudge is a one-shot; clear it so a second blocked Enter re-fires it.
   useEffect(() => {
@@ -52,6 +73,9 @@ export function Composer({
       setBlocked(true);
       return;
     }
+    // Sending ends dictation, and anything still being recognized is dropped
+    // rather than landing in the emptied box.
+    dictation.cancel();
     setText("");
     if (ref.current) ref.current.style.height = "auto";
     onSend(t);
@@ -72,6 +96,9 @@ export function Composer({
           onChange={(e) => {
             setText(e.target.value);
             grow(e.target);
+            // Typing takes the box back. Everything heard so far is already
+            // in it, so a late result must not overwrite the edit.
+            if (dictation.listening) dictation.cancel();
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -80,6 +107,16 @@ export function Composer({
             }
           }}
         />
+        {dictation.supported && (
+          <button
+            type="button"
+            className={`mic${dictation.listening ? " listening" : ""}`}
+            onClick={toggleMic}
+            aria-pressed={dictation.listening}
+          >
+            <IconMic size={17} title="Dictate" />
+          </button>
+        )}
         {busy ? (
           <button
             className={`send stop${blocked ? " nudge" : ""}`}
@@ -96,8 +133,15 @@ export function Composer({
       <p className="sr-only" role="status">
         {blocked
           ? "PI is still writing. Your message is still in the box."
-          : ""}
+          : dictation.listening
+            ? "Listening. Tap the mic again when you're done."
+            : ""}
       </p>
+      {dictation.problem && (
+        <p className="dictation-note" role="alert">
+          {dictation.problem}
+        </p>
+      )}
       {/* "connects to" rather than "reads": one connection can carry another
           app's data (TigerJunction's scope covers course ratings and seat
           watches), so a promise about what PI reads would be one it breaks.

@@ -269,6 +269,18 @@ export function IconSend(props: IconProps) {
   );
 }
 
+/** A desk microphone — dictation. */
+export function IconMic(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5.5 11a6.5 6.5 0 0 0 13 0" />
+      <path d="M12 17.5V21" />
+      <path d="M9 21h6" />
+    </Icon>
+  );
+}
+
 /**
  * The π mark, written rather than typeset. Used in the sidebar wordmark, the
  * sign-in card and the boot shell so the brand glyph never depends on Georgia
