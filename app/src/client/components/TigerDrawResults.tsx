@@ -5,6 +5,7 @@ import {
   housingDataStatus,
   housingUrl,
   housingTourUrl,
+  housingWarnings,
 } from "../lib/tigerdraw";
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
@@ -60,7 +61,9 @@ function mediaTitle(media: Record<string, unknown>) {
   return (
     ((
       {
-        floor_plan: "Floor plan",
+        floor_plan: /\.pdf$/i.test(new URL(housingUrl(media.url)!).pathname)
+          ? "PDF floor plan"
+          : "Image floor plan",
         room_plan: "Room plan",
         thumbnail: "Building photo",
         "360": "360° tour",
@@ -80,12 +83,16 @@ function MediaPreview({
   const url = housingUrl(media.url)!;
   const title = mediaTitle(media);
   const tour = media.type === "360" ? housingTourUrl(url) : null;
+  const preview = housingUrl(media.preview_url);
   const image =
-    media.type !== "360" &&
-    /\.(?:png|jpe?g|webp|gif|avif|svg)$/i.test(new URL(url).pathname);
+    preview ||
+    (media.type !== "360" &&
+      /\.(?:png|jpe?g|webp|gif|avif|svg)$/i.test(new URL(url).pathname));
   return (
     <>
-      <div className="draw-media-stage">
+      <div
+        className={`draw-media-stage${!tour && (!image || failed) ? " draw-media-stage-compact" : ""}`}
+      >
         {tour ? (
           <iframe
             src={tour}
@@ -104,7 +111,7 @@ function MediaPreview({
             aria-label={`Open ${title.toLowerCase()} in full size`}
           >
             <img
-              src={url}
+              src={preview ?? url}
               alt={`${title}${roomLabel ? ` — ${roomLabel}` : ""}`}
               loading="lazy"
               decoding="async"
@@ -137,12 +144,18 @@ function MediaPreview({
           </span>
         </div>
         <a href={url} target="_blank" rel="noreferrer">
-          {tour ? "Full screen ↗" : "Open original ↗"}
+          {tour
+            ? "Full screen ↗"
+            : /\.pdf$/i.test(new URL(url).pathname)
+              ? "Open PDF ↗"
+              : "Open original ↗"}
         </a>
       </div>
       {media.media_type === "EXAMPLE" && (
         <p className="draw-media-note">
-          Example view · may show a similar room or section.
+          {media.type === "floor_plan" || media.type === "room_plan"
+            ? "Example plan · layout may differ."
+            : "Example view · may show a similar room or section."}
         </p>
       )}
     </>
@@ -191,7 +204,7 @@ function MediaGallery({
                     new URL(url).pathname,
                   )
                 ? url
-                : null;
+                : housingUrl(item.preview_url);
             return (
               <button
                 type="button"
@@ -237,9 +250,7 @@ export function TigerDrawResults({ value }: { value: unknown }) {
   const fallback = Array.isArray(coverage.static_fallback)
     ? coverage.static_fallback.length
     : 0;
-  const warnings = Array.isArray(data.warnings)
-    ? data.warnings.filter((w): w is string => typeof w === "string")
-    : [];
+  const warnings = housingWarnings(data.warnings);
   const dataStatus = housingDataStatus(data);
   return (
     <div className="draw-results">
@@ -310,14 +321,6 @@ export function TigerDrawResults({ value }: { value: unknown }) {
         <p className="draw-notice">{warnings.slice(0, 3).join(" ")}</p>
       )}
       {dataStatus && <p className="draw-data-status">{dataStatus}</p>}
-      {(housingRows(data.sources).some((s) => s.source_kind === "static") ||
-        housingRows(housingObject(data.room).sources).some(
-          (s) => s.source_kind === "static",
-        )) && (
-        <p className="draw-notice">
-          Original update dates for archived information are unknown.
-        </p>
-      )}
     </div>
   );
 }

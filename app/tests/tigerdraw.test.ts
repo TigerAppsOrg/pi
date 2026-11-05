@@ -134,7 +134,7 @@ test("room cards escape untrusted reviews and preserve conflicts, examples and f
   assert.ok(html.includes("Example view"));
   assert.ok(html.includes("Conflicting square footage"));
   assert.ok(html.includes("Partial results"));
-  assert.ok(html.includes("Archived information"));
+  assert.ok(html.includes("Saved information"));
 });
 
 test("media gallery renders an active image with a compact view selector", () => {
@@ -235,7 +235,7 @@ test("housing provenance renders only as a quiet status, without API or GitHub l
   const html = renderToStaticMarkup(
     createElement(TigerDrawResults, { value: { rooms: [], sources } }),
   );
-  assert.ok(html.includes("Includes archived information"));
+  assert.ok(html.includes("Includes saved information"));
   assert.ok(!html.includes("github.com"));
   assert.ok(!html.includes("room_images"));
   assert.ok(!html.includes("Source 1"));
@@ -245,7 +245,7 @@ test("housing provenance renders only as a quiet status, without API or GitHub l
   );
   assert.equal(
     housingDataStatus({ sources: [{ source_kind: "static" }] }),
-    "Archived information",
+    "Saved information",
   );
   assert.equal(housingDataStatus({}), null);
 });
@@ -271,4 +271,91 @@ test("chat citations replace internal TigerDraw destinations while preserving pu
     studentSourceLink("https://github.com/other/project").href,
     "https://github.com/other/project",
   );
+});
+
+test("PDF floor plans render their own first-page preview and keep the original PDF link", () => {
+  const pdf = "https://draw.tigerapps.org/static/pdfs/patton/2.pdf";
+  const preview = "https://assets.example.org/plans/2-preview.png";
+  const html = renderToStaticMarkup(
+    createElement(TigerDrawResults, {
+      value: {
+        building: "Patton",
+        floor: "2",
+        plans: [
+          { type: "floor_plan", floor: "2", url: pdf, preview_url: preview },
+          {
+            type: "floor_plan",
+            floor: "2",
+            url: "https://example.org/plan.png",
+            media_type: "EXAMPLE",
+          },
+        ],
+        sources: [{ source_kind: "static" }],
+        warnings: [
+          "Floor plans are static assets; their original update dates are unknown.",
+        ],
+      },
+    }),
+  );
+  assert.ok(html.includes(`src="${preview}"`));
+  assert.ok(html.includes(`href="${pdf}"`));
+  assert.ok(html.includes("PDF floor plan"));
+  assert.ok(html.includes("Image floor plan"));
+  assert.ok(!html.includes("Archived"));
+  assert.ok(!html.includes("Saved information"));
+  assert.ok(!html.includes("update dates"));
+  assert.ok(!html.includes("static assets"));
+  assert.equal(
+    housingDataStatus({
+      sources: [{ source_kind: "static", purpose: "reference_asset" }],
+    }),
+    null,
+  );
+  const fallback = renderToStaticMarkup(
+    createElement(TigerDrawResults, {
+      value: {
+        plans: [{ type: "floor_plan", url: "https://example.org/missing.pdf" }],
+      },
+    }),
+  );
+  assert.ok(fallback.includes("draw-media-stage-compact"));
+});
+test("example-plan qualifications remain visible", () => {
+  const html = renderToStaticMarkup(
+    createElement(TigerDrawResults, {
+      value: {
+        plans: [
+          {
+            type: "floor_plan",
+            url: "https://example.org/plan.png",
+            media_type: "EXAMPLE",
+          },
+        ],
+        warnings: ["No floor plan is available for this selection."],
+      },
+    }),
+  );
+  assert.ok(html.includes("Example plan · layout may differ."));
+  assert.ok(html.includes("No floor plan is available"));
+});
+
+test("preview URLs come only from MCP results and unsafe URLs are rejected", () => {
+  const original = "https://example.org/original.pdf";
+  const html = renderToStaticMarkup(
+    createElement(TigerDrawResults, {
+      value: {
+        plans: [
+          {
+            type: "floor_plan",
+            url: original,
+            preview_url: "javascript:alert(1)",
+          },
+        ],
+      },
+    }),
+  );
+  assert.ok(!html.includes("javascript:"));
+  assert.ok(!html.includes("<img"));
+  assert.ok(html.includes("draw-media-stage-compact"));
+  assert.ok(html.includes(`href="${original}"`));
 });

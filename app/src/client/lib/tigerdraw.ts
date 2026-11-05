@@ -41,10 +41,16 @@ export function housingDataStatus(value: unknown): string | null {
     ...housingRows(housingObject(data.reviews).sources),
   ];
   const kinds = new Set(sources.map((source) => source.source_kind));
-  if (kinds.has("static"))
+  const referencePlans = Array.isArray(data.plans) && data.partial !== true;
+  const fallback =
+    sources.some(
+      (source) =>
+        source.source_kind === "static" && source.purpose !== "reference_asset",
+    ) && !referencePlans;
+  if (fallback)
     return kinds.has("live") || kinds.has("cache")
-      ? "Includes archived information"
-      : "Archived information";
+      ? "Includes saved information"
+      : "Saved information";
   if (kinds.has("cache")) return "Recently retrieved";
   if (kinds.has("live")) return "Live data";
   return null;
@@ -60,4 +66,18 @@ export function housingTourUrl(value: unknown): string | null {
     (url.pathname.endsWith("/") || /\/index\.html?$/i.test(url.pathname))
     ? safe
     : null;
+}
+
+export function housingWarnings(value: unknown): string[] {
+  const legacyNotices = new Set([
+    "Floor plans are static assets; their original update dates are unknown.",
+    "Original update dates for archived information are unknown.",
+    "Static source data; original update dates are unknown.",
+  ]);
+  return Array.isArray(value)
+    ? value.filter(
+        (warning): warning is string =>
+          typeof warning === "string" && !legacyNotices.has(warning.trim()),
+      )
+    : [];
 }

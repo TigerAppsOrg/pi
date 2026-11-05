@@ -174,3 +174,9 @@
     padding: 0.65rem 0.75rem;
   }
 }
+
+.draw-media-stage.draw-media-stage-compact {
+  height: auto;
+  min-height: 0;
+  padding: 1rem;
+}

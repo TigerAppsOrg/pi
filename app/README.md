@@ -132,3 +132,10 @@ token.
   matches the production transform.
 - `useAgentChat` suspends while loading history — keep chat pages under a
   `<Suspense>` boundary.
+
+### Floor-plan previews
+
+TigerDraw owns and hosts floor-plan previews. MCP results supply `preview_url`
+alongside each original PDF URL. PI renders that URL with an original-document
+link and a compact fallback if the preview is unavailable. PI contains no
+TigerDraw document assets, manifest, PDF renderer, or preview-generation step.
