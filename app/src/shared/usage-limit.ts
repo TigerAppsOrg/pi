@@ -1,3 +1,5 @@
+import { DEFAULT_MODEL, type PiModel } from "./apps";
+
 /**
  * Each student's weekly model budget, in dollars. The tiers are copied from
  * PrincetonCourses' ask gateway (tiger-junction, apps/ask-gateway/app/
@@ -10,7 +12,7 @@
 export type Budget = {
   /** Spend allowed on any model, Opus included. */
   tier1Usd: number;
-  /** Further spend allowed on Sonnet only, once tier 1 is used up. */
+  /** Further spend allowed on Sonnet or Haiku, once tier 1 is used up. */
   tier2Usd: number;
   windowMs: number;
 };
@@ -19,8 +21,13 @@ export const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const DEFAULT_BUDGET: Budget = { tier1Usd: 3, tier2Usd: 1, windowMs: WEEK_MS };
 
-/** The model a student drops to once their Opus budget is spent. */
-export const TIER2_MODEL = "claude-sonnet-5";
+/** The model a student drops to once tier 1 is spent. */
+export const TIER2_MODEL = DEFAULT_MODEL;
+
+/** Restrict Opus after tier one without upgrading a cheaper Haiku choice. */
+export function modelForBudget(selected: PiModel, usage: UsageStatus | null): PiModel {
+  return usage?.tier === 2 && selected === "claude-opus-5" ? TIER2_MODEL : selected;
+}
 
 /**
  * The dollar amounts can be changed per deploy (Worker vars) without a code
@@ -47,7 +54,7 @@ export type Spend = { at: number; usd: number };
 export type UsageStatus = {
   spentUsd: number;
   limitUsd: number;
-  /** 1: any model. 2: Opus budget spent, Sonnet only. Exhausted: nothing left. */
+  /** 1: any model. 2: Sonnet or Haiku. Exhausted: nothing left. */
   tier: 1 | 2 | "exhausted";
   blocked: boolean;
   percentUsed: number;
@@ -121,8 +128,8 @@ export function limitNote(status: UsageStatus): string | null {
   }
   if (status.tier === 2) {
     return when
-      ? `You've used this week's Opus budget, so PI is answering with Sonnet 5 until ${when}.`
-      : "You've used this week's Opus budget, so PI is answering with Sonnet 5 for now.";
+      ? `You've used most of this week's PI budget. Sonnet 5.5 and Haiku 5.5 are available until ${when}.`
+      : "You've used most of this week's PI budget. Sonnet 5.5 and Haiku 5.5 are available for now.";
   }
   return null;
 }

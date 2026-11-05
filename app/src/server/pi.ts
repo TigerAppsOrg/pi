@@ -2,20 +2,21 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { Think } from "@cloudflare/think";
 import { callable, getAgentByName } from "agents";
 import type { AgentMcpOAuthProvider } from "agents/mcp/do-oauth-client-provider";
-import { hasToolCall, tool, type UIMessage } from "ai";
+import { hasToolCall, tool, wrapLanguageModel, type UIMessage } from "ai";
 import { z } from "zod";
 import { EMPTY_WORKSPACES, workspaceContext, type WorkspaceState } from "../shared/workspaces";
 import { handleWorkspaceRequest, WORKSPACE_KEY } from "./workspaces";
 import {
-  TIER2_MODEL,
   budgetFrom,
   limitNote,
+  modelForBudget,
   usageStatus,
   type Budget,
   type Spend,
   type UsageStatus,
 } from "../shared/usage-limit";
 import { NOTICE_MODEL_ID, noticeModel } from "./notice-model";
+import { promptCache } from "./prompt-cache";
 import {
   addStep,
   costUsd,
@@ -33,10 +34,13 @@ import {
 import {
   COVERED_BY_JUNCTION,
   DEFAULT_ENGINE_BASE,
+  DEFAULT_MODEL,
   PI_APPS,
+  resolveModel,
   toolOwner,
   type AppKey,
   type PiApp,
+  type PiModel,
   type PiSettings,
 } from "../shared/apps";
 
@@ -58,9 +62,6 @@ export type PiState = {
   /** The student's standing against the weekly budget, from their desk. */
   usage?: UsageStatus;
 };
-
-const CLAUDE_MODELS = new Set(["claude-opus-5", "claude-sonnet-5"]);
-const DEFAULT_CLAUDE_MODEL = "claude-opus-5";
 
 /** The apps PI may ask a student to switch on. */
 const APP_KEYS = PI_APPS.map((a) => a.key) as [AppKey, ...AppKey[]];
@@ -238,7 +239,7 @@ export class Pi extends Think<Env, PiState> {
   private turnUsage: TurnUsage | null = null;
   private turnStartedAt = 0;
   /** The model getModel() resolved, for pricing the turn. */
-  private turnModel = DEFAULT_CLAUDE_MODEL;
+  private turnModel: string = DEFAULT_MODEL;
 
   getDefaultTimezone() {
     return "America/New_York";
@@ -251,10 +252,8 @@ export class Pi extends Think<Env, PiState> {
   }
 
   /** The Claude model the student picked in the composer. */
-  private selectedModel(): string {
-    const preference = this.getConfig<PiSettings>()?.model ?? DEFAULT_CLAUDE_MODEL;
-    // Stale configs may still carry the retired "campus" preference.
-    return CLAUDE_MODELS.has(preference) ? preference : DEFAULT_CLAUDE_MODEL;
+  private selectedModel(): PiModel {
+    return resolveModel(this.getConfig<PiSettings>()?.model);
   }
 
   private claude(model: string) {
@@ -263,7 +262,9 @@ export class Pi extends Think<Env, PiState> {
       // No silent fallback model: fail the turn loudly so ops notices.
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
-    return createAnthropic({ apiKey: key })(model);
+    // Every Claude call goes through here, so this is where prompt caching
+    // lands: both the composer's model and the budget downgrade.
+    return wrapLanguageModel({ model: createAnthropic({ apiKey: key })(model), middleware: promptCache });
   }
 
   getSystemPrompt() {
@@ -571,11 +572,10 @@ export class Pi extends Think<Env, PiState> {
         maxSteps: 1,
       };
     }
-    // Past the Opus budget, every answer comes from Sonnet whatever the
-    // composer says, the same way PrincetonCourses steps down.
+    // Tier two restricts Opus, but keeps a student's cheaper Haiku selection.
     const selected = this.selectedModel();
-    const downgrade = usage?.tier === 2 && selected !== TIER2_MODEL;
-    this.turnModel = downgrade ? TIER2_MODEL : selected;
+    const allowed = modelForBudget(selected, usage);
+    this.turnModel = allowed;
     const workspaceNote = await (await this.deskStub(settings.netid)).getWorkspaceContext(
       this.name.slice(`u-${settings.netid}-`.length)
     );
@@ -640,7 +640,7 @@ export class Pi extends Think<Env, PiState> {
         : [];
     return {
       ...(inherited ?? {}),
-      ...(downgrade ? { model: this.claude(TIER2_MODEL) } : {}),
+      ...(allowed !== selected ? { model: this.claude(allowed) } : {}),
       // The system prompt is assembled before this hook runs, so a turn that
       // lost an app can only correct the record here — otherwise the model
       // reads "Connected TigerApps: TigerJunction" and answers with the

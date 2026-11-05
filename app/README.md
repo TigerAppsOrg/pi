@@ -25,9 +25,16 @@ browser (React + useAgentChat over WebSocket)
   endpoint. Connections use the MCP v2 client (`@modelcontextprotocol/client`
   2.x, stateless streamable HTTP). Identity travels as `x-user-netid` headers
   set per connection; changing netid reconnects everything.
-- **Models**: Claude Opus 5 by default, with Sonnet 5 and a Workers AI
-  fallback ("Campus") in the switcher. Claude models require the
-  `ANTHROPIC_API_KEY` secret; without it every choice falls back to Campus.
+- **Models**: Claude Sonnet 5.5 by default, with Haiku 5.5 and Opus 5 in the
+  switcher. Existing Opus choices are preserved. Saved Sonnet 5 and retired
+  model choices resolve to Sonnet 5.5. All models require `ANTHROPIC_API_KEY`.
+  Prompt caching marks the last system block (covering tool definitions) and
+  the last conversation block with the default five-minute cache TTL.
+  Reuse requires an unchanged prefix, the same model, and enough prompt tokens.
+  Check `cacheRead` in `pi.usage` after a follow-up step or turn to verify a hit.
+  The weekly budget restricts Opus to Sonnet 5.5 after tier one and preserves
+  Haiku choices. Haiku usage is priced per request, including its higher rates
+  above 100,000 prompt tokens, before costs are summed for the turn.
 - **Identity**: Princeton CAS sign-in (`src/server/auth.ts`, using
   `https://authenticate.princeton.edu/cas`). The Worker validates service
   tickets through `/p3/serviceValidate` over HTTPS and takes the NetID from

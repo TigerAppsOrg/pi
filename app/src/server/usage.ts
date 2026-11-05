@@ -6,7 +6,9 @@
  * the cost analysis reads (Workers Logs parses JSON lines into fields).
  */
 
-/** USD per million tokens, from Anthropic's price list. */
+/** USD per million tokens, verified 2026-11-05.
+ * https://platform.claude.com/docs/en/about-claude/pricing
+ */
 type Price = {
   input: number;
   output: number;
@@ -21,7 +23,8 @@ export const MODEL_PRICES: Record<string, Price> = {
   "claude-opus-5": { input: 5, output: 25, cacheRead: 0.5, cacheWrite5m: 6.25, cacheWrite1h: 10 },
   "claude-sonnet-5": { input: 2, output: 10, cacheRead: 0.2, cacheWrite5m: 2.5, cacheWrite1h: 4 },
   "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.2, cacheWrite5m: 5, cacheWrite1h: 8 },
-  "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.2, cacheWrite5m: 2.5, cacheWrite1h: 4 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.1, cacheWrite5m: 2.5, cacheWrite1h: 4 },
+  "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite5m: 0.125, cacheWrite1h: 0.2 },
 };
 
 /** Anthropic's server-side web search: $10 per 1,000 searches. */
@@ -39,7 +42,17 @@ export type TurnUsage = {
   output: number;
   reasoning: number;
   webSearches: number;
+  /** Tokens from individual requests above Haiku 5.5's 100k prompt threshold.
+   * Kept separately so a long step does not reprice earlier short steps.
+   */
+  longContext?: TokenCounts;
 };
+
+const TOKEN_KINDS = ["input", "cacheRead", "cacheWrite5m", "cacheWrite1h", "output"] as const;
+type TokenCounts = Pick<TurnUsage, (typeof TOKEN_KINDS)[number]>;
+
+const tokenCost = (usage: TokenCounts, price: Price): number =>
+  TOKEN_KINDS.reduce((sum, kind) => sum + usage[kind] * price[kind], 0);
 
 export function emptyTurnUsage(): TurnUsage {
   return {
@@ -91,15 +104,28 @@ export function addStep(total: TurnUsage, usage: StepUsage | undefined): TurnUsa
     noCache !== undefined
       ? n(noCache)
       : Math.max(0, n(usage?.inputTokens) - cacheRead - cacheWrite);
+  const output = n(usage?.outputTokens);
+  let longContext = total.longContext;
+  // The threshold counts all prompt tokens, including reads and writes.
+  if (input + cacheRead + cacheWrite > 100_000) {
+    longContext = {
+      input: (longContext?.input ?? 0) + input,
+      cacheRead: (longContext?.cacheRead ?? 0) + cacheRead,
+      cacheWrite5m: (longContext?.cacheWrite5m ?? 0) + cacheWrite - cacheWrite1h,
+      cacheWrite1h: (longContext?.cacheWrite1h ?? 0) + cacheWrite1h,
+      output: (longContext?.output ?? 0) + output,
+    };
+  }
   return {
     steps: total.steps + 1,
     input: total.input + input,
     cacheRead: total.cacheRead + cacheRead,
     cacheWrite5m: total.cacheWrite5m + cacheWrite - cacheWrite1h,
     cacheWrite1h: total.cacheWrite1h + cacheWrite1h,
-    output: total.output + n(usage?.outputTokens),
+    output: total.output + output,
     reasoning: total.reasoning + n(usage?.outputTokenDetails?.reasoningTokens),
     webSearches: total.webSearches + n(raw.server_tool_use?.web_search_requests),
+    ...(longContext ? { longContext } : {}),
   };
 }
 
@@ -110,12 +136,12 @@ export function addStep(total: TurnUsage, usage: StepUsage | undefined): TurnUsa
 export function costUsd(model: string, usage: TurnUsage): number | null {
   const price = MODEL_PRICES[model];
   if (!price) return null;
-  const tokens =
-    usage.input * price.input +
-    usage.cacheRead * price.cacheRead +
-    usage.cacheWrite5m * price.cacheWrite5m +
-    usage.cacheWrite1h * price.cacheWrite1h +
-    usage.output * price.output;
+  let tokens = tokenCost(usage, price);
+  // Haiku charges 5x the base token rates for each request above 100k.
+  // The base cost is already counted, so add only the remaining 4x.
+  if (model === "claude-haiku-5-5" && usage.longContext) {
+    tokens += 4 * tokenCost(usage.longContext, price);
+  }
   return tokens / 1_000_000 + usage.webSearches * WEB_SEARCH_USD;
 }
 
