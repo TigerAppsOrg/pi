@@ -1,7 +1,16 @@
 import { useState } from "react";
 import {
+  IconPeople,
+  IconArea,
+  IconFloors,
+  IconCooling,
+  IconElevator,
+  IconRank,
+  IconStar,
+} from "./Icons";
+import {
   housingObject,
-  housingRows,
+  housingContent,
   housingDataStatus,
   housingUrl,
   housingTourUrl,
@@ -9,50 +18,78 @@ import {
 } from "../lib/tigerdraw";
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
-const labels: Record<string, string> = {
-  sq_footage: "square footage",
-  draw_rank: "historical draw rank",
-  res_college: "college",
-  has_360: "360 availability",
-  num_reviews: "review count",
-  avg_rating: "average rating",
-  ac: "air conditioning",
-};
 function RoomRow({ room }: { room: Record<string, unknown> }) {
-  const details = [
-    typeof room.occupancy === "number"
-      ? `${room.occupancy} person`
-      : "occupancy unknown",
-    typeof room.sq_footage === "number"
-      ? `${room.sq_footage} sq ft`
-      : "area unknown",
-    typeof room.floor === "string" ? `floor ${room.floor}` : "",
-    room.ac === true ? "AC" : "",
-    room.elevator === true ? "elevator" : "",
-    typeof room.draw_rank === "number"
-      ? `historical rank ${room.draw_rank}`
-      : "",
-  ].filter(Boolean);
-  const conflicts = Object.keys(housingObject(room.conflicts));
+  const conflicts = housingObject(room.conflicts);
+  const known = (field: string) => !Object.hasOwn(conflicts, field);
+  const numeric = (field: string) =>
+    known(field) &&
+    typeof room[field] === "number" &&
+    Number.isFinite(room[field]);
+  const facts = [
+    numeric("occupancy") && {
+      key: "occupancy",
+      icon: IconPeople,
+      label: "Occupancy",
+      value: `${room.occupancy} ${room.occupancy === 1 ? "person" : "people"}`,
+    },
+    numeric("sq_footage") && {
+      key: "area",
+      icon: IconArea,
+      label: "Room size",
+      value: `${room.sq_footage} sq ft`,
+    },
+    known("floor") &&
+      (typeof room.floor === "string" || typeof room.floor === "number") &&
+      String(room.floor).trim() !== "" && {
+        key: "floor",
+        icon: IconFloors,
+        label: "Floor",
+        value: String(room.floor),
+      },
+    known("ac") &&
+      room.ac === true && {
+        key: "ac",
+        icon: IconCooling,
+        label: "Air conditioning",
+        value: "Available",
+      },
+    known("elevator") &&
+      room.elevator === true && {
+        key: "elevator",
+        icon: IconElevator,
+        label: "Elevator",
+        value: "Available",
+      },
+    numeric("draw_rank") && {
+      key: "rank",
+      icon: IconRank,
+      label: "Historical draw rank",
+      value: `#${room.draw_rank}`,
+    },
+    numeric("avg_rating") && {
+      key: "rating",
+      icon: IconStar,
+      label: "Student rating",
+      value: `${room.avg_rating}/5${numeric("num_reviews") ? ` · ${room.num_reviews} ${room.num_reviews === 1 ? "review" : "reviews"}` : ""}`,
+    },
+  ].filter((fact) => !!fact);
   return (
     <article className="draw-room">
-      <strong>
+      <strong className="draw-room-title">
         {text(room.building)} {text(room.room_no)}
       </strong>
-      <p>{details.join(" · ")}</p>
-      {typeof room.avg_rating === "number" && (
-        <p>
-          {room.avg_rating}/5 ·{" "}
-          {typeof room.num_reviews === "number" ? room.num_reviews : "unknown"}{" "}
-          reviews
-        </p>
-      )}
-      {conflicts.length > 0 && (
-        <p className="draw-notice">
-          Conflicting{" "}
-          {conflicts.map((f) => labels[f] ?? f.replaceAll("_", " ")).join(", ")}
-          ; those values are unknown.
-        </p>
+      {facts.length > 0 && (
+        <dl className="draw-room-facts">
+          {facts.map(({ key, icon: FactIcon, label, value }) => (
+            <div className="draw-room-fact" key={key}>
+              <FactIcon size={18} />
+              <div>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            </div>
+          ))}
+        </dl>
       )}
     </article>
   );
@@ -239,13 +276,10 @@ function MediaGallery({
 }
 export function TigerDrawResults({ value }: { value: unknown }) {
   const data = housingObject(value);
-  const rooms = data.room
-    ? [housingObject(data.room)]
-    : housingRows(data.rooms);
-  const buildings = housingRows(data.buildings);
-  const media = [...housingRows(data.images), ...housingRows(data.plans)];
+  const { rooms, buildings, media, reviews } = housingContent(data);
   const reviewData = housingObject(data.reviews);
-  const reviews = housingRows(reviewData.reviews);
+  if (![rooms, buildings, media, reviews].some((rows) => rows.length > 0))
+    return null;
   const coverage = housingObject(data.coverage);
   const fallback = Array.isArray(coverage.static_fallback)
     ? coverage.static_fallback.length
@@ -301,9 +335,6 @@ export function TigerDrawResults({ value }: { value: unknown }) {
       )}
       {reviewData.available === true && reviews.length === 0 && (
         <p>No reviews were returned for this room.</p>
-      )}
-      {rooms.length === 0 && buildings.length === 0 && media.length === 0 && (
-        <p>No matches or media were available for this selection.</p>
       )}
       {(rooms.length > 8 ||
         buildings.length > 8 ||

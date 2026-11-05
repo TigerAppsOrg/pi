@@ -77,7 +77,36 @@ export function housingWarnings(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter(
         (warning): warning is string =>
-          typeof warning === "string" && !legacyNotices.has(warning.trim()),
+          typeof warning === "string" &&
+          !legacyNotices.has(warning.trim()) &&
+          !/^Conflicting source records:/i.test(warning.trim()),
       )
     : [];
+}
+
+/** Visible result content; provenance and empty-result notices alone do not make a card. */
+export function housingContent(value: unknown) {
+  const data = housingObject(value);
+  const named = (value: unknown) =>
+    typeof value === "string" && value.trim().length > 0;
+  return {
+    rooms: (data.room
+      ? [housingObject(data.room)]
+      : housingRows(data.rooms)
+    ).filter((room) => named(room.building) && named(room.room_no)),
+    buildings: housingRows(data.buildings).filter((building) =>
+      named(building.building),
+    ),
+    media: [...housingRows(data.images), ...housingRows(data.plans)].filter(
+      (media) => housingUrl(media.url),
+    ),
+    reviews: housingRows(housingObject(data.reviews).reviews).filter(
+      (review) =>
+        named(review.untrusted_text) ||
+        (typeof review.rating === "number" && Number.isFinite(review.rating)),
+    ),
+  };
+}
+export function housingHasContent(value: unknown): boolean {
+  return Object.values(housingContent(value)).some((rows) => rows.length > 0);
 }

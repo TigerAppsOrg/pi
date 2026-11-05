@@ -10,6 +10,7 @@ import {
   housingDataStatus,
   housingUrl,
   housingTourUrl,
+  housingHasContent,
 } from "../src/client/lib/tigerdraw.ts";
 import { parseToolPart, ownerOf } from "../src/client/lib/tools.ts";
 import { createElement } from "react";
@@ -95,7 +96,7 @@ test("housing links exclude script/credential URLs and errors show the useful me
     "No such room",
   );
 });
-test("room cards escape untrusted reviews and preserve conflicts, examples and fallback notices", () => {
+test("room cards escape untrusted reviews, hide internal conflicts, and preserve example and fallback notices", () => {
   const html = renderToStaticMarkup(
     createElement(TigerDrawResults, {
       value: {
@@ -132,7 +133,7 @@ test("room cards escape untrusted reviews and preserve conflicts, examples and f
   assert.ok(html.includes("&lt;script&gt;"));
   assert.ok(!html.includes('href="javascript:'));
   assert.ok(html.includes("Example view"));
-  assert.ok(html.includes("Conflicting square footage"));
+  assert.ok(!html.includes("Conflicting"));
   assert.ok(html.includes("Partial results"));
   assert.ok(html.includes("Saved information"));
 });
@@ -233,7 +234,9 @@ test("housing provenance renders only as a quiet status, without API or GitHub l
     },
   ];
   const html = renderToStaticMarkup(
-    createElement(TigerDrawResults, { value: { rooms: [], sources } }),
+    createElement(TigerDrawResults, {
+      value: { rooms: [{ building: "Patton", room_no: "88" }], sources },
+    }),
   );
   assert.ok(html.includes("Includes saved information"));
   assert.ok(!html.includes("github.com"));
@@ -358,4 +361,120 @@ test("preview URLs come only from MCP results and unsafe URLs are rejected", () 
   assert.ok(!html.includes("<img"));
   assert.ok(html.includes("draw-media-stage-compact"));
   assert.ok(html.includes(`href="${original}"`));
+});
+
+test("room facts use labeled icons and omit conflicted values and reconciliation warnings", () => {
+  const html = renderToStaticMarkup(
+    createElement(TigerDrawResults, {
+      value: {
+        room: {
+          building: "Bloomberg",
+          room_no: "111",
+          occupancy: 1,
+          sq_footage: 160,
+          floor: "1",
+          ac: true,
+          elevator: true,
+          bathroom: null,
+          draw_rank: 623,
+          conflicts: { bathroom: [] },
+        },
+        warnings: ["Conflicting source records: bathroom."],
+      },
+    }),
+  );
+  for (const label of [
+    "Occupancy",
+    "1 person",
+    "Room size",
+    "160 sq ft",
+    "Floor",
+    "Air conditioning",
+    "Elevator",
+    "Historical draw rank",
+    "#623",
+  ])
+    assert.ok(html.includes(label));
+  assert.ok(html.includes('<dl class="draw-room-facts">'));
+  assert.equal((html.match(/aria-hidden="true"/g) ?? []).length, 6);
+  assert.ok(!/conflict|bathroom|unknown/i.test(html));
+  const incomplete = renderToStaticMarkup(
+    createElement(TigerDrawResults, {
+      value: {
+        rooms: [
+          {
+            building: "Blair",
+            room_no: "B41",
+            occupancy: 2,
+            sq_footage: 160,
+            ac: true,
+            elevator: false,
+            avg_rating: 4,
+            num_reviews: 1,
+            conflicts: { sq_footage: [], ac: [], num_reviews: [] },
+          },
+        ],
+      },
+    }),
+  );
+  assert.ok(incomplete.includes("2 people"));
+  assert.ok(incomplete.includes("4/5"));
+  for (const absent of [
+    "160 sq ft",
+    "Room size",
+    "Air conditioning",
+    "Elevator",
+    "1 review",
+    "unknown",
+    "Conflicting",
+  ])
+    assert.ok(!incomplete.includes(absent));
+});
+
+test("empty TigerDraw responses do not produce cards even with cached status or notices", () => {
+  for (const value of [
+    {},
+    { rooms: [], sources: [{ source_kind: "cache" }] },
+    {
+      images: [],
+      plans: [],
+      warnings: ["No images available."],
+      partial: true,
+    },
+    { room: {}, buildings: [{}], images: [{ url: "javascript:bad" }] },
+    { reviews: { available: false, reviews: [] } },
+    { reviews: { available: true, reviews: [{ untrusted_text: " " }] } },
+  ]) {
+    assert.equal(housingHasContent(value), false);
+    assert.equal(
+      renderToStaticMarkup(createElement(TigerDrawResults, { value })),
+      "",
+    );
+  }
+});
+test("useful results keep their cards and relevant availability notes", () => {
+  for (const value of [
+    {
+      room: { building: "Patton", room_no: "88" },
+      reviews: { available: false },
+    },
+    { buildings: [{ building: "Patton" }] },
+    {
+      plans: [
+        {
+          url: "https://draw.tigerapps.org/static/pdfs/2.pdf",
+          type: "floor_plan",
+        },
+      ],
+    },
+    { reviews: { reviews: [{ untrusted_text: "Bright room", rating: 4 }] } },
+  ]) {
+    assert.equal(housingHasContent(value), true);
+    const html = renderToStaticMarkup(
+      createElement(TigerDrawResults, { value }),
+    );
+    assert.ok(html.includes("draw-results"));
+    assert.ok(!html.includes("No matches or media"));
+    if (value.room) assert.ok(html.includes("Reviews are unavailable"));
+  }
 });

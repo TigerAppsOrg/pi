@@ -33,7 +33,7 @@ import "../styles/menus.css";
 import { WeekGrid } from "./WeekGrid";
 import { SaveSourceButton } from "./WorkspaceControls";
 import { TigerDrawResults } from "./TigerDrawResults";
-import { housingError } from "../lib/tigerdraw";
+import { housingError, housingHasContent } from "../lib/tigerdraw";
 import "../styles/snatch.css";
 import "../styles/native-cards.css";
 import "../styles/tigerdraw.css";
@@ -128,6 +128,7 @@ export function ToolRender({ view, onSend, settled = false }: ToolRenderProps) {
   }
 
   if (ownerOf(view) === "tigerdraw") {
+    if (!housingHasContent(view.data)) return null;
     return <ToolCard view={view} label={cardLabel(view)} link={{ href: "https://draw.tigerapps.org", label: "Open TigerDraw" }}><TigerDrawResults value={view.data} /></ToolCard>;
   }
 

@@ -3,7 +3,7 @@
   line-height: 1.5;
 }
 .draw-room {
-  padding: 0.65rem 0;
+  padding: 1rem 0;
   border-bottom: 1px solid var(--rule);
 }
 .draw-results p {
@@ -179,4 +179,38 @@
   height: auto;
   min-height: 0;
   padding: 1rem;
+}
+
+.draw-room-title {
+  display: block;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+.draw-room-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr));
+  gap: 0.85rem 1.25rem;
+  margin: 0.85rem 0 0.2rem;
+}
+.draw-room-fact {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  min-width: 0;
+}
+.draw-room-fact > svg {
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
+  color: var(--muted);
+}
+.draw-room-fact dt {
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+.draw-room-fact dd {
+  margin: 0.15rem 0 0;
+  font-weight: 500;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
 }
