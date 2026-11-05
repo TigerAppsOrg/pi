@@ -33,34 +33,31 @@ export function housingError(value: string | null): string {
   }
   return "TigerDraw couldn't answer that. Try again later.";
 }
-export function housingSources(
-  value: unknown,
-): { url: string; kind: string }[] {
+export function housingDataStatus(value: unknown): string | null {
   const data = housingObject(value);
   const sources = [
     ...housingRows(data.sources),
     ...housingRows(housingObject(data.room).sources),
     ...housingRows(housingObject(data.reviews).sources),
   ];
-  return [
-    ...new Map(
-      sources.flatMap((s) => {
-        const url = housingUrl(s.source_url) ?? housingUrl(s.source);
-        return url
-          ? [
-              [
-                url,
-                {
-                  url,
-                  kind:
-                    typeof s.source_kind === "string"
-                      ? s.source_kind
-                      : "source",
-                },
-              ] as const,
-            ]
-          : [];
-      }),
-    ).values(),
-  ];
+  const kinds = new Set(sources.map((source) => source.source_kind));
+  if (kinds.has("static"))
+    return kinds.has("live") || kinds.has("cache")
+      ? "Includes archived information"
+      : "Archived information";
+  if (kinds.has("cache")) return "Recently retrieved";
+  if (kinds.has("live")) return "Live data";
+  return null;
+}
+
+/** Only embed the known external tour host; other media keeps its original link. */
+export function housingTourUrl(value: unknown): string | null {
+  const safe = housingUrl(value);
+  if (!safe) return null;
+  const url = new URL(safe);
+  return url.origin === "https://purv360s.z13.web.core.windows.net" &&
+    url.pathname.startsWith("/images/") &&
+    (url.pathname.endsWith("/") || /\/index\.html?$/i.test(url.pathname))
+    ? safe
+    : null;
 }

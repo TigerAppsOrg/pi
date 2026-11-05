@@ -117,7 +117,7 @@ export const PI_APPS: PiApp[] = [
   {
     key: "tigerdraw",
     home: "https://draw.tigerapps.org",
-    logo: "/logos/tigerdraw.svg",
+    logo: "/logos/tigerdraw.png",
     glyph: "TD",
     name: "TigerDraw",
     mcpPath: "",

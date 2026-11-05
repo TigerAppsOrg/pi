@@ -1,8 +1,10 @@
+import { useState } from "react";
 import {
   housingObject,
   housingRows,
-  housingSources,
+  housingDataStatus,
   housingUrl,
+  housingTourUrl,
 } from "../lib/tigerdraw";
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
@@ -54,6 +56,174 @@ function RoomRow({ room }: { room: Record<string, unknown> }) {
     </article>
   );
 }
+function mediaTitle(media: Record<string, unknown>) {
+  return (
+    ((
+      {
+        floor_plan: "Floor plan",
+        room_plan: "Room plan",
+        thumbnail: "Building photo",
+        "360": "360° tour",
+      } as Record<string, string>
+    )[text(media.type)] || "Room image") +
+    (media.floor ? ` · floor ${text(media.floor)}` : "")
+  );
+}
+function MediaPreview({
+  media,
+  roomLabel,
+}: {
+  media: Record<string, unknown>;
+  roomLabel: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const url = housingUrl(media.url)!;
+  const title = mediaTitle(media);
+  const tour = media.type === "360" ? housingTourUrl(url) : null;
+  const image =
+    media.type !== "360" &&
+    /\.(?:png|jpe?g|webp|gif|avif|svg)$/i.test(new URL(url).pathname);
+  return (
+    <>
+      <div className="draw-media-stage">
+        {tour ? (
+          <iframe
+            src={tour}
+            title={`${title}${roomLabel ? ` — ${roomLabel}` : ""}`}
+            sandbox="allow-scripts allow-same-origin"
+            allow="fullscreen"
+            allowFullScreen
+            loading="lazy"
+            referrerPolicy="no-referrer"
+          />
+        ) : image && !failed ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Open ${title.toLowerCase()} in full size`}
+          >
+            <img
+              src={url}
+              alt={`${title}${roomLabel ? ` — ${roomLabel}` : ""}`}
+              loading="lazy"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              onError={() => setFailed(true)}
+            />
+          </a>
+        ) : (
+          <a
+            className="draw-media-placeholder"
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {failed
+              ? "Preview unavailable · open original ↗"
+              : media.type === "360"
+                ? "Open 360° tour ↗"
+                : /\.pdf$/i.test(new URL(url).pathname)
+                  ? "Open PDF floor plan ↗"
+                  : "Open original ↗"}
+          </a>
+        )}
+      </div>
+      <div className="draw-media-caption">
+        <div>
+          <strong>{title}</strong>
+          <span className="draw-media-room">
+            {tour ? "Drag to look around · scroll to zoom" : roomLabel}
+          </span>
+        </div>
+        <a href={url} target="_blank" rel="noreferrer">
+          {tour ? "Full screen ↗" : "Open original ↗"}
+        </a>
+      </div>
+      {media.media_type === "EXAMPLE" && (
+        <p className="draw-media-note">
+          Example view · may show a similar room or section.
+        </p>
+      )}
+    </>
+  );
+}
+function MediaGallery({
+  media,
+  roomLabel,
+}: {
+  media: Record<string, unknown>[];
+  roomLabel: string;
+}) {
+  const items = media.filter((m) => housingUrl(m.url)).slice(0, 20);
+  const [selected, setSelected] = useState(0);
+  const active = items[Math.min(selected, items.length - 1)];
+  if (!active) return null;
+  return (
+    <section
+      className="draw-gallery"
+      aria-label={roomLabel ? `Media for ${roomLabel}` : "Room media"}
+    >
+      {roomLabel && (
+        <header className="draw-gallery-header">
+          <strong>{roomLabel}</strong>
+          <span>{items.length} views</span>
+        </header>
+      )}
+      <MediaPreview
+        key={text(active.url)}
+        media={active}
+        roomLabel={roomLabel}
+      />
+      {items.length > 1 && (
+        <div
+          className="draw-media-selector"
+          role="group"
+          aria-label="Choose a view"
+        >
+          {items.map((item, i) => {
+            const url = housingUrl(item.url)!;
+            const tour = item.type === "360" ? housingTourUrl(url) : null;
+            const thumbnail = tour
+              ? new URL("preview.jpg", tour).href
+              : item.type !== "360" &&
+                  /\.(?:png|jpe?g|webp|gif|avif|svg)$/i.test(
+                    new URL(url).pathname,
+                  )
+                ? url
+                : null;
+            return (
+              <button
+                type="button"
+                key={`${url}-${i}`}
+                className="draw-media-choice"
+                aria-pressed={item === active}
+                onClick={() => setSelected(i)}
+              >
+                {thumbnail ? (
+                  <img
+                    src={thumbnail}
+                    alt=""
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    onError={(event) => {
+                      event.currentTarget.style.visibility = "hidden";
+                    }}
+                  />
+                ) : (
+                  <span className="draw-choice-icon">
+                    {item.type === "360" ? "360°" : "PDF"}
+                  </span>
+                )}
+                <span>{mediaTitle(item)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
 export function TigerDrawResults({ value }: { value: unknown }) {
   const data = housingObject(value);
   const rooms = data.room
@@ -70,7 +240,7 @@ export function TigerDrawResults({ value }: { value: unknown }) {
   const warnings = Array.isArray(data.warnings)
     ? data.warnings.filter((w): w is string => typeof w === "string")
     : [];
-  const sources = housingSources(data);
+  const dataStatus = housingDataStatus(data);
   return (
     <div className="draw-results">
       {data.partial === true && (
@@ -98,27 +268,12 @@ export function TigerDrawResults({ value }: { value: unknown }) {
         </ul>
       )}
       {media.length > 0 && (
-        <ul>
-          {media.slice(0, 20).map((m, i) => {
-            const url = housingUrl(m.url);
-            return (
-              url && (
-                <li key={i}>
-                  <a href={url} target="_blank" rel="noreferrer">
-                    {text(m.type).replaceAll("_", " ") || "Image"}
-                    {m.floor ? ` · floor ${text(m.floor)}` : ""}
-                  </a>{" "}
-                  ·{" "}
-                  {text(m.media_type) === "EXAMPLE"
-                    ? "example media"
-                    : text(m.media_type) === "ACTUAL"
-                      ? "actual media"
-                      : "media type unverified"}
-                </li>
-              )
-            );
-          })}
-        </ul>
+        <MediaGallery
+          media={media}
+          roomLabel={[text(data.building), text(data.room_no)]
+            .filter(Boolean)
+            .join(" ")}
+        />
       )}
       {reviews.map((r, i) => (
         <blockquote key={i}>
@@ -154,21 +309,13 @@ export function TigerDrawResults({ value }: { value: unknown }) {
       {warnings.length > 0 && (
         <p className="draw-notice">{warnings.slice(0, 3).join(" ")}</p>
       )}
-      {sources.length > 0 && (
-        <p className="draw-sources">
-          {sources.slice(0, 8).map((s, i) => (
-            <a key={s.url} href={s.url} target="_blank" rel="noreferrer">
-              Source {i + 1} · {s.kind}
-            </a>
-          ))}
-        </p>
-      )}
+      {dataStatus && <p className="draw-data-status">{dataStatus}</p>}
       {(housingRows(data.sources).some((s) => s.source_kind === "static") ||
         housingRows(housingObject(data.room).sources).some(
           (s) => s.source_kind === "static",
         )) && (
         <p className="draw-notice">
-          Static source data; original update dates are unknown.
+          Original update dates for archived information are unknown.
         </p>
       )}
     </div>
