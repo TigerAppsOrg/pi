@@ -10,16 +10,18 @@ import type { LanguageModelMiddleware } from "ai";
  *
  * 1. The last system message. Anthropic caches the prefix up to a breakpoint,
  *    and the prefix is tools, then system, then messages, so this one covers
- *    the tool definitions and the system prompt. Stable across every student's
- *    turns in a chat, and across students with the same apps connected.
+ *    the tool definitions and the system prompt. Reused while the entire
+ *    prefix is unchanged, including the student's identity and workspace.
  * 2. The last message. The next step (tool result) or the next turn extends
- *    the conversation, so the previous breakpoint becomes a cache read and the
+ *    the conversation, so the previous breakpoint can become a cache read and the
  *    new last message takes over. Anthropic looks back up to 20 blocks for a
- *    matching breakpoint, so the rolling one keeps hitting.
+ *    matching breakpoint. Changes to earlier content or the model, expiry,
+ *    and growth beyond that window can cause a miss.
  *
- * Cache reads cost a tenth of uncached input, writes cost 1.25x, so the
- * second step of any turn already pays for itself. Prompts under the model's
- * minimum (1,024 tokens on Opus and Sonnet) are silently not cached.
+ * The default cache TTL is five minutes. Prompts under the model's minimum
+ * are silently not cached (512 tokens on Sonnet 5.5 and Haiku 5.5).
+ * Verify reuse through cacheRead in pi.usage rather than assuming a hit.
+ * https://platform.claude.com/docs/en/build-with-claude/prompt-caching
  */
 
 type Params = Parameters<NonNullable<LanguageModelMiddleware["transformParams"]>>[0]["params"];

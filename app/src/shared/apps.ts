@@ -291,12 +291,20 @@ export function countConnected(
 export const DEFAULT_ENGINE_BASE = "https://junction-engine.tigerapps.org";
 
 /** Models the switcher offers. */
-export type PiModel = "claude-opus-5" | "claude-sonnet-5";
+export type PiModel = "claude-opus-5" | "claude-sonnet-5-5" | "claude-haiku-5-5";
+
+export const DEFAULT_MODEL: PiModel = "claude-sonnet-5-5";
 
 export const PI_MODELS: Array<{ value: PiModel; label: string }> = [
-  { value: "claude-sonnet-5", label: "Sonnet 5, quicker" },
+  { value: "claude-sonnet-5-5", label: "Sonnet 5.5, balanced" },
+  { value: "claude-haiku-5-5", label: "Haiku 5.5, fastest" },
   { value: "claude-opus-5", label: "Opus 5, sharpest" },
 ];
+
+/** Shared by persisted browser preferences and the server's model allowlist. */
+export function resolveModel(preference: unknown): PiModel {
+  return PI_MODELS.find((model) => model.value === preference)?.value ?? DEFAULT_MODEL;
+}
 
 /** Settings the client pushes to a Pi agent instance. */
 export type PiSettings = {
@@ -308,5 +316,5 @@ export type PiSettings = {
 export const DEFAULT_SETTINGS: PiSettings = {
   netid: "",
   apps: DEFAULT_APPS,
-  model: "claude-sonnet-5",
+  model: DEFAULT_MODEL,
 };

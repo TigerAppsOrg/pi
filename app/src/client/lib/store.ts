@@ -2,7 +2,8 @@ import { useSyncExternalStore } from "react";
 import {
   COVERED_BY_JUNCTION,
   DEFAULT_APPS,
-  PI_MODELS,
+  DEFAULT_MODEL,
+  resolveModel,
   type AppKey,
   type PiModel,
   type PiSettings,
@@ -33,7 +34,7 @@ export const GENERAL_CHAT_TITLE = "PI general chat";
 /** User-tweakable preferences; identity is never stored here. */
 export type Prefs = { apps: AppKey[]; model: PiModel };
 
-const DEFAULT_PREFS: Prefs = { apps: DEFAULT_APPS, model: "claude-sonnet-5" };
+const DEFAULT_PREFS: Prefs = { apps: DEFAULT_APPS, model: DEFAULT_MODEL };
 
 /**
  * Stamped on every saved blob, so a one-time migration runs once. Bump it only
@@ -96,9 +97,7 @@ function getPrefs(netid: string): Prefs {
       const stored: StoredPrefs = raw ? JSON.parse(raw) : {};
       let merged: Prefs = { ...DEFAULT_PREFS, ...stored };
       // A retired model choice (e.g. the old "campus") falls back to default.
-      if (!PI_MODELS.some((m) => m.value === merged.model)) {
-        merged.model = DEFAULT_PREFS.model;
-      }
+      merged.model = resolveModel(merged.model);
       if (raw) {
         merged = migrate(stored, merged);
         // Written back straight away, stamp and all: a migration that reruns

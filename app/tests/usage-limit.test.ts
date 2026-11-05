@@ -26,7 +26,7 @@ test("under $3 a student can use any model", () => {
   assert.equal(limitNote(s), null);
 });
 
-test("past $3 it's Sonnet only, until enough old spend ages out", () => {
+test("past $3 it's Sonnet or Haiku, until enough old spend ages out", () => {
   const spends = [
     { at: now - 5 * DAY, usd: 2 },
     { at: now - 2 * DAY, usd: 1.2 },
@@ -36,7 +36,7 @@ test("past $3 it's Sonnet only, until enough old spend ages out", () => {
   assert.equal(s.blocked, false);
   // Dropping the $2 turn leaves $1.20, back under $3.
   assert.equal(s.resetAt, now - 5 * DAY + WEEK_MS);
-  assert.match(limitNote(s)!, /^You've used most of this week's PI budget, so PI is answering with Sonnet 5 until Fri, Oct 16, 3:10 PM\.$/);
+  assert.equal(limitNote(s), "You've used most of this week's PI budget. Sonnet 5.5 and Haiku 5.5 are available until Fri, Oct 16, 3:10 PM.");
 });
 
 test("at $4 PI stops answering until the week rolls over far enough", () => {

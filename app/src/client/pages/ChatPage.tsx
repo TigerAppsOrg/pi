@@ -156,7 +156,7 @@ function ChatBody({
   // a consent card must not call it on until it has.
   const [engineNote, setEngineNote] = useState<string | null>(null);
   const [gcalReady, setGcalReady] = useState(false);
-  /** Why answers changed: Sonnet only, or nothing left this week. */
+  /** Why answers changed: restricted model choices, or nothing left this week. */
   const [usageNote, setUsageNote] = useState<string | null>(null);
   const agent = useAgent({
     agent: "pi",
