@@ -94,3 +94,35 @@ schedule, registers courses, or reserves seats.
 The component is lazy-loaded only when the lab is opened. While a constraint
 change is being solved, the previous timetable is labeled as previous and its
 controls are unavailable. No obsolete worker result can replace newer input.
+
+## Offline presentation and development demo
+
+Run these commands from `app`.
+
+```
+npm run demo:planner
+```
+
+Open `http://127.0.0.1:5190/tests/semester-lab.html`. This Vite entry uses the real
+component, worker, and Wasm engine with explicitly synthetic section times. It
+makes no model or Junction API calls and requires no sign-in. The production
+planner still uses its existing authentication.
+
+```
+npm run pack:planner-demo
+```
+
+This builds the demo and creates `.artifacts/semester-lab.html`. Open the file
+directly in a modern browser supporting WebAssembly, workers, and
+`DecompressionStream`. React, CSS, fonts, worker code, and Wasm are embedded in
+one file. No HTTP requests are needed to run the planner. The GitHub link in the
+header opens the repository only when clicked. Generated output stays ignored.
+
+Presentation sequence. Pin the initial week, protect Friday, move the earliest
+start to 10am, compare another plan, and click a class to lock it. Undo a change.
+Then open the impossible-week example. Three courses each have two slots, every
+pair fits, but there is no assignment for all three. Finally set an impossible
+start time in the normal semester and use a verified relaxation to recover.
+
+Keep the SAMPLE DATA label visible. A successful demo does not validate real
+Junction records, registration eligibility, or production account integration.
