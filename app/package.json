@@ -12,7 +12,10 @@
     "test": "tsx --test tests/*.test.ts",
     "build:solver": "node scripts/build-solver.mjs",
     "test:solver-native": "node scripts/test-solver-native.mjs",
-    "bench:solver": "tsx scripts/bench-solver.ts"
+    "bench:solver": "tsx scripts/bench-solver.ts",
+    "demo:planner": "vite --config tests/vite.semester.config.ts --host 127.0.0.1 --port 5190",
+    "build:planner-demo": "vite build --config tests/vite.semester.config.ts",
+    "pack:planner-demo": "npm run build:planner-demo && node scripts/pack-planner-demo.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.0",
