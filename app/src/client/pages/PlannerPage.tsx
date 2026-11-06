@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PI_APPS, type PiSettings } from "../../shared/apps";
 import { IconChevron, IconExternal } from "../components/Icons";
 import { WeekGrid } from "../components/WeekGrid";
 import { friendlyError, rawError, useDesk } from "../lib/desk";
 import { extractSchedule, type ScheduleView } from "../lib/tools";
+import { fromJunction } from "../scheduling/junction";
 import "../styles/desk.css";
 
 type SchedMeta = { id: number; title: string; term: number; termName?: string };
@@ -19,9 +20,10 @@ type Detail =
   | { kind: "loading" }
   | { kind: "empty" }
   | { kind: "error"; err: unknown }
-  | { kind: "ready"; schedule: ScheduleView };
+  | { kind: "ready"; schedule: ScheduleView; raw: unknown };
 
 const JUNCTION = PI_APPS.find((a) => a.key === "junction")!;
+const SemesterLab = lazy(() => import("../components/SemesterLab").then(m => ({ default: m.SemesterLab })));
 
 export function PlannerPage({
   settings,
@@ -35,6 +37,12 @@ export function PlannerPage({
   const [term, setTerm] = useState<number | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [detail, setDetail] = useState<Detail>({ kind: "loading" });
+  const [labOpen, setLabOpen] = useState(false);
+  const lab = useMemo(() => {
+    if (!labOpen || detail.kind !== "ready") return null;
+    try { return { problem: fromJunction(detail.raw) }; }
+    catch (error) { return { error: error instanceof Error ? error.message : "The schedule data is incomplete." }; }
+  }, [labOpen, detail]);
 
   const junctionOn = settings.apps.includes("junction");
   const gen = useRef({ list: 0, detail: 0 });
@@ -79,7 +87,7 @@ export function PlannerPage({
         });
         if (gen.current.detail !== id) return;
         const view = extractSchedule(data);
-        setDetail(view ? { kind: "ready", schedule: view } : { kind: "empty" });
+        setDetail(view ? { kind: "ready", schedule: view, raw: data } : { kind: "empty" });
       } catch (err) {
         if (gen.current.detail === id) setDetail({ kind: "error", err });
       }
@@ -113,13 +121,13 @@ export function PlannerPage({
 
   return (
     <div className="page">
-      <div className="page-inner">
-        <h1 className="page-title">
+      <div className={`page-inner${labOpen ? " planner-lab" : ""}`}>
+        {!labOpen && <><h1 className="page-title">
           My <span className="ink-word swipe v3">Planner</span>
         </h1>
         <p className="page-sub">
           Straight from TigerJunction, <span className="hand">in highlighter</span>.
-        </p>
+        </p></>}
 
         {load.kind === "loading" && (
           <div className="paper-card sheet-skel" aria-busy="true">
@@ -213,7 +221,10 @@ export function PlannerPage({
                 ))}
             </div>
 
-            <div className="paper-card">
+            {detail.kind === "ready" && <button type="button" className="planner-lab-entry" onClick={() => setLabOpen(!labOpen)}>{labOpen ? "Back to saved schedule" : "Open semester lab"}<IconChevron size={14}/></button>}
+
+            {labOpen && lab?.problem ? <Suspense fallback={<p>Opening the planning lab…</p>}><SemesterLab key={selected} problem={lab.problem}/></Suspense> : <div className="paper-card">
+              {labOpen && lab?.error && <p className="card-error" role="alert">{lab.error}</p>}
               {detail.kind === "ready" && (
                 <div className="week-scroll">
                   <WeekGrid schedule={detail.schedule} />
@@ -248,7 +259,7 @@ export function PlannerPage({
                   </button>
                 </div>
               )}
-            </div>
+            </div>}
 
             <p className="footnote">
               PI reads this from TigerJunction. Changes you make there show up

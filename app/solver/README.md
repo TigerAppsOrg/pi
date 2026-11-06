@@ -3,6 +3,8 @@
 `schedule.cpp` is a freestanding C++17 finite-domain solver compiled to
 WebAssembly. It has no allocator, WASI dependency, network calls, or JavaScript
 imports. A TypeScript adapter validates inputs and decodes ranked answers.
+Each request runs in a cancellable browser worker. Changing a constraint
+terminates obsolete work, so it cannot overwrite a newer result.
 
 Each section group requires one option. An option can have several meetings.
 Hard constraints are nonoverlapping meetings, earliest start, latest finish,
@@ -78,3 +80,17 @@ module compilation and instantiation, workers, conflict diagnosis, and rendering
 The fixtures are synthetic and repeated in a warm process. These measurements
 do not establish browser interaction latency, production tail latency, a speedup
 over another solver, or worst-case performance. There is no CI timing threshold.
+
+## Interactive planner
+
+Open a saved schedule in My Planner and choose Open semester lab. The lab uses
+the original section payload and computes local alternatives. Protect a weekday
+or a time interval, set earliest and latest times, lock a section, or change the
+ranking objective. Pin a plan to compare changes and undo constraint edits.
+Infeasible requests show conflict groups and verified relaxations. An unfinished
+search remains explicitly unfinished. The lab never saves a new Junction
+schedule, registers courses, or reserves seats.
+
+The component is lazy-loaded only when the lab is opened. While a constraint
+change is being solved, the previous timetable is labeled as previous and its
+controls are unavailable. No obsolete worker result can replace newer input.
