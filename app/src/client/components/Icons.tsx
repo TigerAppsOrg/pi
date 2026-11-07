@@ -310,3 +310,50 @@ export function PiMark({ size = 16, title, ...rest }: IconProps) {
     </svg>
   );
 }
+
+/** Room facts, matching the shared outline icon set. */
+export function IconPeople(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="9" cy="7" r="3" />
+      <path d="M3 20v-2a6 6 0 0 1 12 0v2M17 4a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v2" />
+    </Icon>
+  );
+}
+export function IconArea(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="m8 16 8-8M8 12v4h4M12 8h4v4" />
+    </Icon>
+  );
+}
+export function IconFloors(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m3 8 9-5 9 5-9 5-9-5ZM3 12l9 5 9-5M3 16l9 5 9-5" />
+    </Icon>
+  );
+}
+export function IconCooling(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9 5l3 3 3-3M9 19l3-3 3 3M5 11l4-1-1-4M19 13l-4 1 1 4M8 18l1-4-4-1M16 6l-1 4 4 1" />
+    </Icon>
+  );
+}
+export function IconElevator(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <path d="M12 10v11m-5-6 2-2 2 2M9 13v5m4-4 2 2 2-2M15 16v-5M9 6h6" />
+    </Icon>
+  );
+}
+export function IconRank(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 21V11h6v10M9 21V4h6v17M15 21v-7h6v7" />
+    </Icon>
+  );
+}
