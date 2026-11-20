@@ -119,7 +119,16 @@ const pendingSchema = z.object({
   state: z.string().min(1),
   service: z.string().url(),
   exp: z.number().finite(),
+  returnTo: z.string().optional(),
 });
+
+/** Only the connector's own pages can be resumed after CAS sign-in. */
+function loginReturnTo(value: string | null | undefined): string {
+  if (!value || value.length > 8192 || !/^\/connect(?:\?|\/authorize\?|$)/.test(value)) return "/";
+  const parsed = new URL(value, "https://pi.invalid");
+  return parsed.origin === "https://pi.invalid" && ["/connect", "/connect/authorize"].includes(parsed.pathname)
+    ? parsed.pathname + parsed.search : "/";
+}
 
 const casResponseSchema = z.object({
   serviceResponse: z.object({
@@ -169,6 +178,7 @@ export async function handleAuth(
     authorize.searchParams.set("service", service.toString());
     const pending = await signToken({
       state, service: service.toString(), exp: Date.now() / 1000 + LOGIN_TTL_S,
+      returnTo: loginReturnTo(url.searchParams.get("returnTo")),
     }, env.SESSION_SECRET);
     return response(null, {
       status: 302,
@@ -239,7 +249,7 @@ export async function handleAuth(
     return response(null, {
       status: 302,
       headers: [
-        ["location", "/"],
+        ["location", loginReturnTo(pending.returnTo)],
         ["set-cookie", cookie(SESSION_COOKIE, token, SESSION_TTL_S)],
         ["set-cookie", cookie(CAS_COOKIE, "", 0)],
         ["set-cookie", cookie("pi_oauth", "", 0)],

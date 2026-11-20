@@ -167,6 +167,10 @@ export function AppsPage({
               separate yes, even the ones TigerJunction could technically
               answer for.
             </p>
+            <p className="page-sub">
+              <a href="/connect">Use Princeton course tools in Claude</a>
+              . Manage its access separately from these app switches.
+            </p>
           </div>
 
           <div className="master-switch">

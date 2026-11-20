@@ -20,8 +20,10 @@ function cookieFrom(res: Response, name: string): string {
   return entry.split(";")[0];
 }
 
-async function start(base = origin) {
-  const res = await handleAuth(new Request(`${base}/auth/login`), env);
+async function start(base = origin, returnTo?: string) {
+  const loginUrl = new URL("/auth/login", base);
+  if (returnTo) loginUrl.searchParams.set("returnTo", returnTo);
+  const res = await handleAuth(new Request(loginUrl), env);
   assert.ok(res);
   assert.equal(res.status, 302);
   const login = new URL(res.headers.get("location")!);
@@ -30,6 +32,24 @@ async function start(base = origin) {
   callback.searchParams.set("ticket", "ST-test-ticket");
   return { res, login, service, callback, cookie: cookieFrom(res, "pi_cas") };
 }
+
+test("CAS resumes the signed connector authorization request and ignores callback returnTo", async () => {
+  const destination = "/connect/authorize?client_id=test&state=original";
+  const flow = await start(origin, destination);
+  flow.callback.searchParams.set("returnTo", "https://attacker.test/");
+  mock.method(globalThis, "fetch", async () => success());
+  const response = await handleAuth(new Request(flow.callback, { headers: { cookie: flow.cookie } }), env);
+  assert.equal(response?.headers.get("location"), destination);
+});
+
+test("CAS rejects external and unrelated return destinations", async () => {
+  mock.method(globalThis, "fetch", async () => success());
+  for (const destination of ["https://evil.test", "//evil.test", "/\\evil.test", "/agents/u-other/chat", "/connect/../auth/logout", "/connect/revoke", "/connect.evil.test", "/connect%2f..%2fauth/logout"]) {
+    const flow = await start(origin, destination);
+    const response = await handleAuth(new Request(flow.callback, { headers: { cookie: flow.cookie } }), env);
+    assert.equal(response?.headers.get("location"), "/", destination);
+  }
+});
 
 function success(user = "jd1234", attributes?: Record<string, unknown>) {
   return Response.json({ serviceResponse: { authenticationSuccess: { user, attributes } } });
