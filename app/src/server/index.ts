@@ -1,12 +1,16 @@
 import { getAgentByName, routeAgentRequest } from "agents";
 import { getSession, handleAuth, userPrefix } from "./auth";
 import { GCAL_CALLBACK_PATH } from "./gcal";
+import { routeCourseConnector } from "./course-oauth";
 
 export { Pi } from "./pi";
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    const connector = await routeCourseConnector(request, env, ctx);
+    if (connector) return connector;
 
     const auth = await handleAuth(request, env);
     if (auth) return auth;

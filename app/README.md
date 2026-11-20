@@ -6,6 +6,10 @@ React app and the agent; there are no containers and no servers to warm up.
 
 ## Architecture
 
+The [course connector](COURSE_CONNECTOR.md) lets students use Princeton course
+tools from their existing Claude account, with Princeton sign-in and separate
+read or saved-plan editing permissions.
+
 ```
 browser (React + useAgentChat over WebSocket)
    └─ Cloudflare Worker  (static assets + routeAgentRequest)
