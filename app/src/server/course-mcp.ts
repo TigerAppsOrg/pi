@@ -1,3 +1,4 @@
+import { PUBLIC_COURSE_TOOLS, publicCourseData } from "./course-public-data";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { Server, WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/server";
 
@@ -11,6 +12,7 @@ type Source = "junction" | "princetoncourses" | "path";
 const READ_TOOLS: Record<Source, string[]> = {
   junction: [
     "search_courses", "get_course_details", "get_course_sections", "list_departments",
+    "list_published_terms", "search_published_courses", "get_published_course",
     "discover_courses", "list_terms", "compare_courses", "get_enrollment_stats",
     "get_user_schedules", "get_schedule_details", "verify_schedule",
   ],
@@ -34,7 +36,8 @@ const policy = new Map<string, { source: Source; write: boolean }>(sources.flatM
 ]));
 
 export const COURSE_INSTRUCTIONS = `Help Princeton students select courses using current TigerApps data.
-Start with list_terms and use an explicit term throughout. Tool descriptions may contain stale labels such as 'current' or 'upcoming'; rely on returned catalog data. If the requested term is absent, check it explicitly and report missing coverage when no results are available. Never substitute an older offering or treat missing data as proof that a course will not be offered. Ask for the student's degree (AB or BSE), major, graduation year, completed courses, interests, and time constraints when unknown. Use saved plans only with their permission. A TigerPath plan is not an official transcript or proof of completed prerequisites.
+Start with get_course_data_status for the requested term. Prefer list_published_terms, search_published_courses and get_published_course for official current offerings, instructors, sections and prerequisite text. These live engine tools may require a backend deployment/configuration before they are available. list_terms describes the imported TigerJunction database only, not everything Princeton has published. Use an explicit term throughout. Tool descriptions may contain stale labels such as 'current' or 'upcoming'; rely on returned catalog data. If the requested term is absent, check it explicitly and report missing coverage when no results are available. Never substitute an older offering or treat missing data as proof that a course will not be offered. Ask for the student's degree (AB or BSE), major, graduation year, completed courses, interests, and time constraints when unknown. Use saved plans only with their permission. A TigerPath plan is not an official transcript or proof of completed prerequisites.
+If official engine reads are unavailable, get_cs_course_schedule can verify COS course-level times directly from the department. Its coverage excludes full precept/lab combinations and other departments. Do not substitute this fallback for a complete schedule. search_prince_articles adds dated campus reporting from public Prince search, not Clio; reporting is context, not authoritative requirements or section times. Keep article publication dates, fetch times, corpus coverage and unknown ingestion history separate.
 Read course details, sections, degree requirements, and reviews before recommending a shortlist. Distinguish catalog facts, historical student opinions, and your own assessment. Include course links or identifiers and explain workload, prerequisite uncertainty, and tradeoffs.
 verify_schedule is an upstream screening check, not proof of a globally feasible selection of lecture, precept, and lab sections. Inspect the actual section choices and times. Never claim prerequisite eligibility, degree completion, available seats, or registration based solely on a plan or this check.
 Propose alternatives before changing anything. Only call plan-writing tools after the student explicitly asks you to save or edit the named plan. Saving in TigerJunction or TigerPath does not enroll the student in a course. This connector cannot access TigerHub registration, Canvas, calendars, PI chats, or the assistant's private memory.
@@ -96,14 +99,19 @@ export function courseUpstream(env: EngineEnv, netid: string): CourseUpstream {
   };
 }
 
-export function createCourseServer(identity: CourseIdentity, upstream: CourseUpstream): Server {
+const livePublicData = publicCourseData();
+const statusTool = { name: "get_course_data_status", description: "Check imported and official live course coverage for a requested term, plus the public CS schedule fallback. Does not read personal plans. Unknown import/ingestion timestamps remain unknown. Call this first when planning a semester.", inputSchema: { type: "object" as const, properties: { term: { type: "integer", minimum: 1000, maximum: 1999 } }, required: ["term"], additionalProperties: false }, annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true } };
+const localTools = [...PUBLIC_COURSE_TOOLS, statusTool];
+
+export function createCourseServer(identity: CourseIdentity, upstream: CourseUpstream, publicData = livePublicData): Server {
   if (!/^[a-z][a-z0-9]{0,63}$/.test(identity.netid) || !identity.scope.includes(COURSE_READ)) throw new Error("Course access requires a verified identity and read permission.");
   const canWrite = identity.scope.includes(PLAN_WRITE);
   const server = new Server({ name: "Princeton Courses by TigerApps", version: "1.0.0" }, {
     capabilities: { tools: {}, prompts: {} }, instructions: COURSE_INSTRUCTIONS,
   });
   server.setRequestHandler("tools/list", async () => {
-    // Fail explicitly rather than making an outage look like a complete catalog.
+    // Keep independent public sources usable during an engine outage. The
+    // status tool reports source availability and coverage explicitly.
     const catalogs = await Promise.allSettled(sources.map(async (source) => {
       let tools: Tool[];
       try { tools = await upstream.list(source); }
@@ -121,16 +129,14 @@ export function createCourseServer(identity: CourseIdentity, upstream: CourseUps
       });
     }));
     // Let every connection finish its cleanup even if one source fails early.
-    return { tools: catalogs.flatMap((result) => {
-      if (result.status === "rejected") throw result.reason;
-      return result.value;
-    }) };
+    return { tools: [...localTools, ...catalogs.flatMap((result) => result.status === "fulfilled" ? result.value : [])] };
   });
   server.setRequestHandler("tools/call", async ({ params }) => {
     const rule = policy.get(params.name);
     const fail = (text: string) => ({ isError: true, content: [{ type: "text" as const, text }] });
-    if (!identity.scope.includes(COURSE_READ) || !rule) return fail("This tool is not available through this connector.");
-    if (rule.write && !canWrite) return fail("Plan editing is disabled. Reconnect and explicitly allow saved-plan changes first.");
+    const local = localTools.some(t => t.name === params.name);
+    if (!identity.scope.includes(COURSE_READ) || (!rule && !local)) return fail("This tool is not available through this connector.");
+    if (rule?.write && !canWrite) return fail("Plan editing is disabled. Reconnect and explicitly allow saved-plan changes first.");
     const args = params.arguments ?? {};
     // Instructor NetIDs are public search keys. No other tool accepts a caller-
     // supplied identity; personal records are scoped by our verified header.
@@ -140,6 +146,25 @@ export function createCourseServer(identity: CourseIdentity, upstream: CourseUps
         return fail("User identity comes from Princeton sign-in, not tool arguments.");
       }
     }
+    if (local) {
+      try {
+        let data: unknown;
+        if (params.name === "get_course_data_status") {
+          const term = args.term;
+          if (typeof term !== "number" || !Number.isInteger(term) || term < 1000 || term > 1999 || ![2, 4].includes(term % 10)) return fail("Provide an explicit four-digit Fall or Spring term.");
+          const checkedAt = new Date().toISOString();
+          const checks = await Promise.allSettled([
+            upstream.call("junction", "list_terms", {}),
+            upstream.call("junction", "list_published_terms", {}),
+            publicData.csSchedule(term),
+          ]);
+          const names = ["tigerjunction_imported_catalog", "princeton_published_terms", "princeton_cs_schedule"];
+          data = { term, checkedAt, latestSuccessfulDatabaseImport: null, sources: checks.map((r, i) => ({ source: names[i], status: r.status === "fulfilled" && !(r.value as { isError?: boolean }).isError ? "available" : "unavailable", ...(r.status === "fulfilled" ? { result: r.value } : {}) })), warning: "Available means the source answered, not that it covers this term or all departments. Compare returned terms and coverage. Historical ratings and saved plans do not verify current offerings. No personal records were queried." };
+        } else data = await publicData.call(params.name, args);
+        return { content: [{ type: "text" as const, text: JSON.stringify(data) }] };
+      } catch { return fail("The public source is unavailable or returned an unexpected format, or the arguments are invalid. Coverage is unknown, not an empty catalog. Try another source and disclose the gap."); }
+    }
+    if (!rule) return fail("Unknown tool.");
     try {
       return await upstream.call(rule.source, params.name, args);
     } catch {
