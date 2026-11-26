@@ -298,7 +298,7 @@ export class Pi extends Think<Env, PiState> {
       "- One of these per turn, and never write a menu of options out in prose — that's what offer_choices is for.",
       "",
       "Ground rules:",
-      "- For current or upcoming course selection, prefer list_published_terms, search_published_courses and get_published_course when available. These read Princeton directly. list_terms and search_courses reflect an imported database that may lag. Never silently substitute a historical term or claim missing imported data means a course is not offered.",
+      "- For current or upcoming course selection, use list_terms and an explicit-term search_courses query, then get_course_details and get_course_sections. These use the maintained TigerJunction catalog, whose importer may lag. Never silently substitute a historical term or claim missing imported data means a course is not offered.",
       "- Princeton term codes end in 2 for Fall and 4 for Spring (e.g. 1272 = Fall 2026). When unsure which term is current, call list_terms rather than guessing.",
       "- The interface renders schedule, course, seat-demand, trending and past-term tool results as visual cards automatically. After a tool call, add a short takeaway (conflicts, standouts, whether a seat is realistic, next step) — never re-list every row the card already shows.",
       "- When a tool errors or comes back empty, say plainly what didn't work and offer the closest thing you can still do. Never paste raw error text, URLs or status codes at the student.",

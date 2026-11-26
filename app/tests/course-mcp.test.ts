@@ -51,7 +51,7 @@ test("guessing a write or unlisted tool cannot bypass read-only authorization", 
   const { upstream, calls } = fakeEngine();
   const client = await connected([COURSE_READ], upstream);
   t.after(() => client.close());
-  for (const name of ["create_schedule", "update_user_schedule", "delete_schedule", "subscribe_to_snatch", "delete_everything", "toString"]) {
+  for (const name of ["create_schedule", "update_user_schedule", "delete_schedule", "subscribe_to_snatch", "delete_everything", "list_published_terms", "search_published_courses", "get_published_course", "toString"]) {
     assert.equal((await client.callTool({ name, arguments: {} })).isError, true);
   }
   assert.equal(calls.length, 0);
@@ -128,11 +128,15 @@ test("coverage reports partial sources without reading plans or confusing availa
   const { WebStandardStreamableHTTPServerTransport } = await import("@modelcontextprotocol/server");
   const { publicCourseData } = await import("../src/server/course-public-data.ts");
   const calls: string[] = [];
+  const queries: Record<string, unknown>[] = [];
   const upstream: CourseUpstream = {
     list: async () => [],
-    call: async (_source, name) => {
+    call: async (_source, name, args) => {
       calls.push(name);
-      if (name === "list_published_terms") throw new Error("private credential detail");
+      if (name === "search_courses") {
+        queries.push(args);
+        throw new Error("private credential detail");
+      }
       return { content: [{ type: "text", text: JSON.stringify({ terms: [{ term: 1272 }] }) }] };
     },
   };
@@ -147,7 +151,8 @@ test("coverage reports partial sources without reading plans or confusing availa
   const body = JSON.parse((result.content as any)[0].text);
   assert.deepEqual(body.sources.map((s: any) => s.status), ["available", "unavailable", "unavailable"]);
   assert.equal(body.latestSuccessfulDatabaseImport, null);
-  assert.deepEqual(calls.sort(), ["list_published_terms", "list_terms"]);
+  assert.deepEqual(calls.sort(), ["list_terms", "search_courses"]);
+  assert.deepEqual(queries, [{ term: 1274, limit: 1 }]);
   assert.doesNotMatch(JSON.stringify(result), /private credential detail/);
   assert.match(body.warning, /not that it covers this term/);
   assert.equal((await client.callTool({ name: "get_course_data_status", arguments: { term: 1274, netid: "student2" } })).isError, true);

@@ -44,8 +44,7 @@ Overlapping upstream tool catalogs cannot change a tool's designated source.
 | TigerPath | Degree requirement trees, aggregate planning statistics, own four-year plan | Add or remove a course in a semester |
 
 The baseline engine provides 24 allowlisted read tools and 5 optional write tools.
-With the published-data engine extension and three local public/coverage tools,
-the connector offers up to 30 read tools. Whole-schedule
+With three local public/coverage tools, the connector offers up to 27 read tools. Whole-schedule
 deletion, seat alerts, TigerHub registration, Canvas, calendar access, and PI
 workspaces are excluded. A saved plan is not a transcript or actual enrollment.
 
@@ -128,8 +127,9 @@ deployment or real plan mutation is part of these local checks.
 ## Published data and coverage
 
 The connector now includes three local read tools independently of engine catalog
-availability. `get_course_data_status(term)` checks the imported catalog, the live
-published-term source and the CS department fallback. It does not read a student's
+availability. `get_course_data_status(term)` checks the maintained catalog term
+list, probes that exact term with `search_courses`, and checks the CS department
+fallback. It does not read a student's
 plans. `get_cs_course_schedule(term)` reads the official department page for that
 exact semester, and rejects a page that silently selects a different term.
 `search_prince_articles(query, page)` searches the Daily Princetonian public site,
@@ -138,14 +138,15 @@ This is not Clio and does not access its database, newsletters, retrieval servic
 credentials or chats. Publication date, fetch time and unknown ingestion history
 are separate fields. Public fetches send neither NetID nor session credentials.
 
-A companion engine change exposes `list_published_terms`,
-`search_published_courses` and `get_published_course` on the junction MCP scope.
-These read Princeton's authenticated OIT course API directly and do not require a
-completed database import. Deploy that change and configure the engine's existing
-`CONSUMER_KEY`/`CONSUMER_SECRET` (preferred) or `API_ACCESS_TOKEN`. PI does not receive
-those credentials. Without that deployment/configuration, only the CS fallback
-and public Prince search are independently available. Imported search results and
-saved-plan validation may still be stale. Do not claim the database was refreshed.
+The existing TigerJunction importer owns catalog ingestion and freshness. PI uses
+its existing `list_terms`, `search_courses`, `get_course_details` and
+`get_course_sections` tools. There is no second OIT tool family or dependency on a
+separate engine PR. The CS fallback and public Prince search remain independently
+available during an engine outage. Imported results and saved-plan validation
+may still be stale until the importer is repaired and backfilled. A successful
+one-course probe establishes only that some data exists for the requested term,
+not that every department or section is complete. Do not claim a database refresh
+or a full-catalog verification based on that probe.
 
 Successful public reads are cached for at most five minutes per process/isolate,
 with fetch timestamps and bounded cache sizes. Errors are not empty catalogs.
@@ -158,8 +159,9 @@ a transcript. No automatic import, production mutation or registration is added.
 Local live checks on November 26, 2026 retrieved Spring 2027 COS 217 with
 `MW 10:40 - 11:30` and dated Prince search results. The existing production engine
 still returned only seven terms through Fall 2026 and no Spring 2027 COS results.
-The authenticated engine reads have fixture tests, but require a deployed smoke
-check with valid OIT credentials before university-wide coverage can be claimed.
+That is a historical observation, not proof of the current production state.
+University-wide coverage requires verification of the importer backfill through
+the existing engine tools; PI does not acquire or configure OIT credentials.
 
 Reproduce the read-only live public-source check from `app` with
 `npx tsx scripts/smoke-current-course-data.ts 1274`. It uses the real MCP transport
