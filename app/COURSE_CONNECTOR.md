@@ -164,3 +164,13 @@ check with valid OIT credentials before university-wide coverage can be claimed.
 Reproduce the read-only live public-source check from `app` with
 `npx tsx scripts/smoke-current-course-data.ts 1274`. It uses the real MCP transport
 with a local test identity, without production sessions or saved-plan writes.
+
+### PI-only requests
+
+The MCP instructions tell the host assistant to honor a student's PI-only request,
+use the connector's own source tools and report gaps instead of silently switching
+to web search or browser control. Official pages fetched server-side by PI remain
+PI tool calls. An absent saved plan is not an empty transcript. These are assistant
+instructions, not an access-control mechanism for the host's other tools. PI
+cannot disable a separately enabled Chrome connector or verify that the host
+complied. Strict tool isolation must be enforced in the host client.
