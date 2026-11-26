@@ -37,7 +37,7 @@ test("real MCP handshake exposes only allowlisted read tools from their designat
   const client = await connected([COURSE_READ], upstream);
   t.after(() => client.close());
   const catalog = await client.listTools();
-  assert.deepEqual(catalog.tools.map(t => t.name).sort(), ["search_courses", "get_user_schedules", "get_course_evaluations", "get_instructor", "get_requirement_tree", "get_user_schedule"].sort());
+  assert.deepEqual(catalog.tools.map(t => t.name).sort(), ["get_cs_course_schedule", "search_prince_articles", "get_course_data_status", "search_courses", "get_user_schedules", "get_course_evaluations", "get_instructor", "get_requirement_tree", "get_user_schedule"].sort());
   assert.ok(catalog.tools.every(t => t.annotations?.readOnlyHint));
   await client.callTool({ name: "get_course_evaluations", arguments: { code: "COS 217" } });
   assert.deepEqual(calls, [{ source: "princetoncourses", name: "get_course_evaluations", args: { code: "COS 217" } }]);
@@ -51,7 +51,7 @@ test("guessing a write or unlisted tool cannot bypass read-only authorization", 
   const { upstream, calls } = fakeEngine();
   const client = await connected([COURSE_READ], upstream);
   t.after(() => client.close());
-  for (const name of ["create_schedule", "update_user_schedule", "delete_schedule", "subscribe_to_snatch", "delete_everything", "toString"]) {
+  for (const name of ["create_schedule", "update_user_schedule", "delete_schedule", "subscribe_to_snatch", "delete_everything", "list_published_terms", "search_published_courses", "get_published_course", "toString"]) {
     assert.equal((await client.callTool({ name, arguments: {} })).isError, true);
   }
   assert.equal(calls.length, 0);
@@ -93,7 +93,9 @@ test("upstream failures omit credentials and uncertain writes are never retried"
   assert.match(JSON.stringify(result), /may have been saved/);
   assert.doesNotMatch(JSON.stringify(result), /secret-token|private.example/);
   assert.equal(attempts, 1);
-  await assert.rejects(client.listTools(), error => !String(error).includes("catalog-secret-token") && String(error).includes("catalog is unavailable"));
+  const tools = await client.listTools();
+  assert.deepEqual(tools.tools.map(t => t.name).sort(), ["get_cs_course_schedule", "search_prince_articles", "get_course_data_status"].sort());
+  assert.doesNotMatch(JSON.stringify(tools), /catalog-secret-token/);
 });
 
 test("missing permission or malformed identity cannot create a course session", () => {
@@ -120,4 +122,38 @@ test("consent CSP permits only the callback origin and cannot inject directives"
   for (const uri of ["https://evil.test;script-src/callback", "https://*.evil.test/callback", "javascript:alert(1)"]) {
     assert.equal(policy(uri), "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
   }
+});
+
+test("coverage reports partial sources without reading plans or confusing availability with term coverage", async (t) => {
+  const { WebStandardStreamableHTTPServerTransport } = await import("@modelcontextprotocol/server");
+  const { publicCourseData } = await import("../src/server/course-public-data.ts");
+  const calls: string[] = [];
+  const queries: Record<string, unknown>[] = [];
+  const upstream: CourseUpstream = {
+    list: async () => [],
+    call: async (_source, name, args) => {
+      calls.push(name);
+      if (name === "search_courses") {
+        queries.push(args);
+        throw new Error("private credential detail");
+      }
+      return { content: [{ type: "text", text: JSON.stringify({ terms: [{ term: 1272 }] }) }] };
+    },
+  };
+  const publicData = publicCourseData((async () => { throw new Error("offline"); }) as typeof fetch);
+  const server = createCourseServer({ netid: "student1", scope: [COURSE_READ] }, upstream, publicData);
+  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+  await server.connect(transport);
+  const client = new Client({ name: "coverage-test", version: "1" });
+  await client.connect(new StreamableHTTPClientTransport(new URL("https://pi.test/mcp"), { fetch: (url, init) => transport.handleRequest(new Request(url, init)) }));
+  t.after(async () => { await client.close(); await server.close(); });
+  const result = await client.callTool({ name: "get_course_data_status", arguments: { term: 1274 } });
+  const body = JSON.parse((result.content as any)[0].text);
+  assert.deepEqual(body.sources.map((s: any) => s.status), ["available", "unavailable", "unavailable"]);
+  assert.equal(body.latestSuccessfulDatabaseImport, null);
+  assert.deepEqual(calls.sort(), ["list_terms", "search_courses"]);
+  assert.deepEqual(queries, [{ term: 1274, limit: 1 }]);
+  assert.doesNotMatch(JSON.stringify(result), /private credential detail/);
+  assert.match(body.warning, /not that it covers this term/);
+  assert.equal((await client.callTool({ name: "get_course_data_status", arguments: { term: 1274, netid: "student2" } })).isError, true);
 });

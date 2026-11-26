@@ -43,7 +43,8 @@ Overlapping upstream tool catalogs cannot change a tool's designated source.
 | PrincetonCourses | Course evaluations, review summaries, instructor information | None |
 | TigerPath | Degree requirement trees, aggregate planning statistics, own four-year plan | Add or remove a course in a semester |
 
-There are 24 allowlisted read tools and 5 optional write tools. Whole-schedule
+The baseline engine provides 24 allowlisted read tools and 5 optional write tools.
+With three local public/coverage tools, the connector offers up to 27 read tools. Whole-schedule
 deletion, seat alerts, TigerHub registration, Canvas, calendar access, and PI
 workspaces are excluded. A saved plan is not a transcript or actual enrollment.
 
@@ -122,3 +123,56 @@ require the assistant to report that gap instead of substituting an older term.
 Production CAS-to-Claude authorization, real personal-plan ownership enforcement,
 and saved-plan changes still require an authorized staging check. No production
 deployment or real plan mutation is part of these local checks.
+
+## Published data and coverage
+
+The connector now includes three local read tools independently of engine catalog
+availability. `get_course_data_status(term)` checks the maintained catalog term
+list, probes that exact term with `search_courses`, and checks the CS department
+fallback. It does not read a student's
+plans. `get_cs_course_schedule(term)` reads the official department page for that
+exact semester, and rejects a page that silently selects a different term.
+`search_prince_articles(query, page)` searches the Daily Princetonian public site,
+returning bounded excerpts with source identity, article dates and canonical URLs.
+This is not Clio and does not access its database, newsletters, retrieval service,
+credentials or chats. Publication date, fetch time and unknown ingestion history
+are separate fields. Public fetches send neither NetID nor session credentials.
+
+The existing TigerJunction importer owns catalog ingestion and freshness. PI uses
+its existing `list_terms`, `search_courses`, `get_course_details` and
+`get_course_sections` tools. There is no second OIT tool family or dependency on a
+separate engine PR. The CS fallback and public Prince search remain independently
+available during an engine outage. Imported results and saved-plan validation
+may still be stale until the importer is repaired and backfilled. A successful
+one-course probe establishes only that some data exists for the requested term,
+not that every department or section is complete. Do not claim a database refresh
+or a full-catalog verification based on that probe.
+
+Successful public reads are cached for at most five minutes per process/isolate,
+with fetch timestamps and bounded cache sizes. Errors are not empty catalogs.
+A working source is not proof it covers every department or the requested term.
+The CS page provides course-level meetings, not every precept or lab; missing or
+ambiguous times stay unknown. Prince reporting cannot establish degree policy or
+current section availability. Ratings remain historical and a saved plan is not
+a transcript. No automatic import, production mutation or registration is added.
+
+Local live checks on November 26, 2026 retrieved Spring 2027 COS 217 with
+`MW 10:40 - 11:30` and dated Prince search results. The existing production engine
+still returned only seven terms through Fall 2026 and no Spring 2027 COS results.
+That is a historical observation, not proof of the current production state.
+University-wide coverage requires verification of the importer backfill through
+the existing engine tools; PI does not acquire or configure OIT credentials.
+
+Reproduce the read-only live public-source check from `app` with
+`npx tsx scripts/smoke-current-course-data.ts 1274`. It uses the real MCP transport
+with a local test identity, without production sessions or saved-plan writes.
+
+### PI-only requests
+
+The MCP instructions tell the host assistant to honor a student's PI-only request,
+use the connector's own source tools and report gaps instead of silently switching
+to web search or browser control. Official pages fetched server-side by PI remain
+PI tool calls. An absent saved plan is not an empty transcript. These are assistant
+instructions, not an access-control mechanism for the host's other tools. PI
+cannot disable a separately enabled Chrome connector or verify that the host
+complied. Strict tool isolation must be enforced in the host client.
