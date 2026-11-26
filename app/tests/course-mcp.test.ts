@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { COURSE_READ, PLAN_WRITE, createCourseServer, handleCourseMcp, type CourseUpstream } from "../src/server/course-mcp.ts";
-import { consentPage } from "../src/server/course-consent.ts";
+import { connectorPage, consentPage } from "../src/server/course-consent.ts";
 
 const tool = (name: string) => ({ name, inputSchema: { type: "object" as const, properties: {} } });
 function fakeEngine() {
@@ -110,4 +110,14 @@ test("consent escapes client-controlled text and makes plan editing opt-in", asy
   assert.match(html, /type="checkbox" name="scope" value="plans:write">/);
   assert.match(response.headers.get("content-security-policy")!, /frame-ancestors 'none'/);
   assert.equal(response.headers.get("cache-control"), "no-store");
+});
+
+test("consent CSP permits only the callback origin and cannot inject directives", () => {
+  const policy = (uri: string) => connectorPage("Test", "", undefined, 200, uri).headers.get("content-security-policy")!;
+  assert.match(policy("https://assistant.test/callback?state=private"), /form-action 'self' https:\/\/assistant\.test;/);
+  assert.doesNotMatch(policy("https://assistant.test/callback?state=private"), /callback|private/);
+  assert.match(policy("http://127.0.0.1:4321/callback"), /form-action 'self' http:\/\/127\.0\.0\.1:4321;/);
+  for (const uri of ["https://evil.test;script-src/callback", "https://*.evil.test/callback", "javascript:alert(1)"]) {
+    assert.equal(policy(uri), "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
+  }
 });

@@ -67,6 +67,8 @@ async function flow(netid = "student1") {
   authorize.search = new URLSearchParams({ client_id: client.client_id, redirect_uri: redirectUri, response_type: "code", scope: "courses:read plans:write offline_access", state: "client-state", resource: `${origin}/mcp`, code_challenge: createHash("sha256").update(verifier).digest("base64url"), code_challenge_method: "S256" }).toString();
   const page = await request(authorize.href, { headers: { cookie: session(netid) } });
   assert.equal(page.status, 200);
+  assert.equal(page.headers.get("referrer-policy"), "same-origin", "consent forms must preserve the browser's Origin header");
+  assert.match(page.headers.get("content-security-policy")!, /form-action 'self' https:\/\/assistant\.test;/);
   const html = await page.text();
   const handle = html.match(/name="handle" value="([^"]+)"/)![1];
   const subject = html.match(/name="subject" value="([^"]+)"/)![1];
@@ -118,6 +120,8 @@ test("unsigned browsers return through CAS before connector consent", async () =
 test("consent rejects CSRF, another browser, and switching accounts", async () => {
   const f = await flow();
   assert.equal((await approve(f, false, { requestOrigin: "https://evil.test" })).status, 403);
+  assert.equal((await approve(f, false, { requestOrigin: "null" })).status, 403);
+  assert.equal((await request("/connect/authorize", { method: "POST", headers: { cookie: f.cookie }, body: new URLSearchParams({ handle: f.handle, subject: f.subject, decision: "approve" }) })).status, 403);
   assert.equal((await approve(f, false, { cookie: session() })).status, 400);
   const swapped = f.cookie.replace(/^pi_session=[^;]+/, session("student2"));
   assert.equal((await approve(f, false, { cookie: swapped })).status, 400);
@@ -167,6 +171,8 @@ test("optional editing works and per-student grants can be revoked only by their
   assert.ok(grants.keys.length > 0);
   // The user-facing management page identifies the grant without exposing tokens.
   const page = await request("/connect", { headers: { cookie: session() } });
+  assert.equal(page.headers.get("referrer-policy"), "same-origin", "disconnect forms must preserve the browser's Origin header");
+  assert.match(page.headers.get("content-security-policy")!, /form-action 'self';/);
   const html = await page.text();
   assert.doesNotMatch(html, new RegExp(token.access_token));
   const grantRecords = await Promise.all(grants.keys.map(k => kv.get(k.name, "json") as Promise<any>));
@@ -174,6 +180,7 @@ test("optional editing works and per-student grants can be revoked only by their
   assert.ok(grant);
   const revoke = (netid: string, requestOrigin = origin) => request("/connect/revoke", { method: "POST", headers: { origin: requestOrigin, cookie: session(netid) }, body: new URLSearchParams({ grant: grant.id }) });
   assert.equal((await revoke("student1", "https://evil.test")).status, 403);
+  assert.equal((await revoke("student1", "null")).status, 403);
   await revoke("student2");
   assert.equal((await rpc(token.access_token, "ping")).status, 200);
   assert.equal((await revoke("student1")).status, 303);
